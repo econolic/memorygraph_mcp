@@ -1,0 +1,95 @@
+# hybrid-kb-mcp
+
+Hybrid Retrieval MCP server for knowledge base + persistent conversation memory.
+
+## Features
+
+- MCP tools: `kb.search`, `kb.graph_expand`, `kb.explain`
+- Memory tools: `kb.memory.upsert`, `kb.memory.search`, `kb.memory.delete`
+- Resource URIs: `kb://doc/...`, `kb://chunk/...`, `kb://entity/...`, `kb://memory/...`
+- Retrieval: vector + graph + always-on cross-encoder rerank (with fallback)
+- Security: JWT-aware subject parsing, deny-by-default ACL, redaction
+- Observability: structured logs, audit logger, in-process metrics snapshot
+- Ingestion: filesystem + incremental checksum updates
+
+## Quickstart
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .[dev]
+```
+
+Run stdio transport:
+
+```bash
+python -m kb_mcp.server.transport_stdio
+```
+
+Run streamable HTTP transport:
+
+```bash
+python -m kb_mcp.server.transport_http
+```
+
+Run full local stack:
+
+```bash
+cp .env.example .env
+mkdir -p .docker-data/qdrant .docker-data/neo4j/data
+docker compose up -d --build
+```
+
+## Test
+
+```bash
+pytest
+```
+
+## Notes
+
+- `workspace_id` must be provided in tool payloads.
+- Memory retention is indefinite by default; use `kb.memory.delete` for subject-level deletion.
+
+## Docker Desktop Persistent Data
+
+This compose setup stores database files on host bind mounts, so data survives container recreation:
+
+- Qdrant: `./.docker-data/qdrant`
+- Neo4j: `./.docker-data/neo4j/data`
+
+You can override paths in `.env`:
+
+```bash
+KB_QDRANT_STORAGE_PATH=/absolute/path/to/qdrant-storage
+KB_NEO4J_DATA_PATH=/absolute/path/to/neo4j-data
+```
+
+## External DB Connection Mode
+
+To connect MCP container to external/managed Qdrant and Neo4j, set in `.env`:
+
+```bash
+KB_QDRANT_URL=http://<qdrant-host>:6333
+KB_NEO4J_URI=bolt://<neo4j-host>:7687
+KB_NEO4J_USER=<user>
+KB_NEO4J_PASSWORD=<password>
+```
+
+Then run:
+
+```bash
+docker compose up -d --build
+```
+
+## Register In Codex MCP
+
+Add this to `/root/.codex/config.toml`:
+
+```toml
+[mcp_servers.hybrid_kb_mcp]
+url = "http://127.0.0.1:8080/mcp"
+startup_timeout_sec = 60
+```
+
+Restart Codex session after updating the config.
