@@ -1,0 +1,58 @@
+{
+  "policy_version": "2026-02-19",
+  "description": "Runtime policy for MCP tool orchestration in Hybrid KB MCP.",
+  "decision_schema": {
+    "intent": "fact_lookup|relation_impact|explainability|memory_context|memory_delete",
+    "tools": [
+      {
+        "name": "kb.search",
+        "reason": "Need evidence with citations"
+      }
+    ],
+    "requires_citations": true,
+    "fallback": {
+      "graph_unavailable": "vector_only_with_disclaimer"
+    }
+  },
+  "intent_rules": [
+    {
+      "intent": "fact_lookup",
+      "if_query_contains_any": ["what is", "where documented", "source", "citation"],
+      "tools": ["kb.search"],
+      "mode": "hybrid"
+    },
+    {
+      "intent": "relation_impact",
+      "if_query_contains_any": ["dependency", "impact", "who uses", "path", "chain"],
+      "tools": ["kb.search", "kb.graph_expand"],
+      "mode": "hybrid"
+    },
+    {
+      "intent": "explainability",
+      "if_query_contains_any": ["why relevant", "explain relevance", "why this result"],
+      "tools": ["kb.search", "kb.explain"],
+      "mode": "hybrid"
+    },
+    {
+      "intent": "memory_context",
+      "if_query_contains_any": ["what did we decide", "my context", "remember", "previous session"],
+      "tools": ["kb.memory.search", "kb.search"],
+      "mode": "hybrid"
+    },
+    {
+      "intent": "memory_delete",
+      "if_query_contains_any": ["delete memory", "forget everything", "remove all memory"],
+      "tools": ["kb.memory.delete"],
+      "mode": "hybrid"
+    }
+  ],
+  "memory_write_policy": {
+    "tool": "kb.memory.upsert",
+    "required_fields": ["type", "text", "confidence", "citations"],
+    "constraints": {
+      "min_confidence": 0.75,
+      "citations_required": true
+    }
+  },
+  "system_prompt_template": "You are an MCP-aware assistant. Detect intent first, call tools before answering checkable claims, enforce citations, and never fabricate sources."
+}

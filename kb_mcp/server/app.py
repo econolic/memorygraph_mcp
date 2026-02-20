@@ -9,7 +9,7 @@ from mcp.server.fastmcp import FastMCP
 from kb_mcp.bootstrap import AppDeps, build_deps
 from kb_mcp.observability.tracing import ensure_request_id
 from kb_mcp.retrieval.rerank import RerankConfig
-from kb_mcp.retrieval.router import QueryRouter
+from kb_mcp.retrieval.router import POLICY_VERSION, QueryRouter
 from kb_mcp.security.acl import AccessContext
 from kb_mcp.server.schemas import (
     Citation,
@@ -29,6 +29,18 @@ from kb_mcp.server.schemas import (
     MemoryHit,
     SearchResult,
 )
+
+RUNTIME_TOOL_POLICY_PROMPT = """Ты работаешь с MCP tools базы знаний.
+Всегда сначала определяй intent и вызывай tools до финального ответа, если факт можно проверить.
+Обязательный порядок:
+1) kb.memory.search для user/workspace контекста;
+2) kb.search для factual evidence и citations;
+3) kb.graph_expand для зависимостей/impact;
+4) kb.explain для объяснения релевантности.
+Для новых фактов используй kb.memory.upsert только при наличии citations и confidence >= threshold.
+Для удаления памяти используй только kb.memory.delete.
+Не выдумывай источники: если evidence нет, явно сообщи это.
+Если graph недоступен, деградируй на vector evidence и укажи ограничение."""
 
 
 def _ctx_from_acl(deps: AppDeps, acl: dict[str, Any]) -> AccessContext:
@@ -82,7 +94,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
                 if isinstance(chunk_uri, str):
                     memory_bonus_by_uri[chunk_uri] = max(memory_bonus_by_uri.get(chunk_uri, 0.0), hit.score)
 
-        routed = router.route(payload.query, payload.mode)
+        routed = router.route(payload.query, payload.mode, include_memory=payload.include_memory)
         rerank_cfg = RerankConfig(
             enabled=payload.rerank.enabled,
             provider=payload.rerank.provider,
@@ -129,6 +141,9 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
                 "request_id": request_id,
                 "mode": routed.mode,
                 "route_reason": routed.reason,
+                "intent": routed.intent,
+                "recommended_tools": list(routed.recommended_tools),
+                "policy_version": POLICY_VERSION,
                 "rerank_provider": payload.rerank.provider,
             },
             debug={
@@ -265,6 +280,31 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         out["text"] = deps.redact.redact(str(out.get("text", "")))
         return out
 
+    @mcp.resource("kb://policy/tool-selection")
+    def resource_tool_selection_policy() -> dict[str, Any]:
+        return {
+            "version": POLICY_VERSION,
+            "intent_catalog": [
+                "fact_lookup",
+                "relation_impact",
+                "explainability",
+                "memory_context",
+                "memory_delete",
+            ],
+            "priority_tools": [
+                "kb.memory.search",
+                "kb.search",
+                "kb.graph_expand",
+                "kb.explain",
+            ],
+            "memory_write_constraints": {
+                "tool": "kb.memory.upsert",
+                "requires_citations": True,
+                "requires_confidence_threshold": True,
+            },
+            "fallback_policy": "When graph backend is unavailable, return vector-only evidence with explicit limitation.",
+        }
+
     @mcp.prompt(name="kb.answer_with_citations")
     def prompt_answer_with_citations(question: str) -> str:
         return (
@@ -272,6 +312,10 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
             "Для каждого утверждения дай citation на kb://chunk/... и span. "
             f"Вопрос: {question}"
         )
+
+    @mcp.prompt(name="kb.tool_selection_policy")
+    def prompt_tool_selection_policy() -> str:
+        return RUNTIME_TOOL_POLICY_PROMPT
 
     @mcp.prompt(name="kb.incident_triage")
     def prompt_incident_triage(incident: str) -> str:

@@ -288,3 +288,42 @@
   - Qdrant в bind mount на текущем filesystem пишет warning про filesystem safety checks; функционально работает, но для production лучше ext4 volume.
 - Следующий шаг:
   - При необходимости вынести Qdrant/Neo4j на managed внешние инстансы и оставить в compose только `mcp`.
+
+### Запись
+- Этап: 12 — LLM tool-orchestration policy and few-shot guidance
+- Статус: done
+- Дата/время: 2026-02-19T21:43:00Z
+- Изменённые файлы:
+  - `docs/tool_selection_policy.md`
+  - `README.md`
+  - `implementation_progress_hybrid_kb_mcp.md`
+- Проверки (lint/type/unit/integration): n/a (docs-only)
+- Результат:
+  - Добавлена формальная политика выбора MCP tools для LLM.
+  - Добавлены few-shot сценарии выбора инструментов и правила evidence/citations.
+  - В README добавлена ссылка на policy как каноничный документ для оркестратора.
+- Риски/блокеры: нет
+- Следующий шаг: встроить policy текст в system prompt вашего LLM-host/agent runtime.
+
+### Запись
+- Этап: 13 — Runtime policy wiring (system prompt + agent router) + JSON template
+- Статус: done
+- Дата/время: 2026-02-19T21:46:53Z
+- Изменённые файлы:
+  - `kb_mcp/retrieval/router.py`
+  - `kb_mcp/server/app.py`
+  - `tests/test_router.py`
+  - `docs/tool_selection_policy.template.json`
+  - `README.md`
+  - `implementation_progress_hybrid_kb_mcp.md`
+- Проверки (lint/type/unit/integration):
+  - `python3 -m ruff check .` => OK
+  - `python3 -m mypy kb_mcp` => OK
+  - `python3 -m pytest -s` => 13 passed
+- Результат:
+  - Роутер стал intent-aware (`fact_lookup|relation_impact|explainability|memory_context|memory_delete`) и возвращает `recommended_tools`.
+  - В `kb.search.decision_trace` добавлены `intent`, `recommended_tools`, `policy_version`.
+  - В runtime добавлены `kb.tool_selection_policy` prompt и resource `kb://policy/tool-selection`.
+  - Добавлен готовый JSON-шаблон конфигурации агента: `docs/tool_selection_policy.template.json`.
+- Риски/блокеры: нет
+- Следующий шаг: подключить `kb.tool_selection_policy` и JSON template в runtime-конфиг вашего LLM host/agent router.

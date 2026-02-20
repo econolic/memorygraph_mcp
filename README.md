@@ -6,7 +6,7 @@ Hybrid Retrieval MCP server for knowledge base + persistent conversation memory.
 
 - MCP tools: `kb.search`, `kb.graph_expand`, `kb.explain`
 - Memory tools: `kb.memory.upsert`, `kb.memory.search`, `kb.memory.delete`
-- Resource URIs: `kb://doc/...`, `kb://chunk/...`, `kb://entity/...`, `kb://memory/...`
+- Resource URIs: `kb://doc/...`, `kb://chunk/...`, `kb://entity/...`, `kb://memory/...`, `kb://policy/tool-selection`
 - Retrieval: vector + graph + always-on cross-encoder rerank (with fallback)
 - Security: JWT-aware subject parsing, deny-by-default ACL, redaction
 - Observability: structured logs, audit logger, in-process metrics snapshot
@@ -93,3 +93,18 @@ startup_timeout_sec = 60
 ```
 
 Restart Codex session after updating the config.
+
+## LLM Tool Selection Policy
+
+Use `docs/tool_selection_policy.md` as the canonical instruction set for:
+
+- intent routing (`kb.search` vs `kb.graph_expand` vs `kb.explain`);
+- memory workflows (`kb.memory.search|upsert|delete`);
+- evidence and citation requirements;
+- few-shot examples for orchestrator prompts.
+
+Runtime integration is exposed via:
+
+- prompt: `kb.tool_selection_policy` (system block for agent runtime);
+- search trace fields: `intent`, `recommended_tools`, `policy_version` in `kb.search.decision_trace`;
+- JSON template: `docs/tool_selection_policy.template.json` for external agent/router configs.
