@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from time import perf_counter
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
@@ -31,7 +31,10 @@ from kb_mcp.server.schemas import (
     SearchResult,
 )
 
-FastContext = Context[Any, Any, Any]
+if TYPE_CHECKING:
+    FastContext = Context[Any, Any, Any]
+else:
+    FastContext = Context
 
 RUNTIME_TOOL_POLICY_PROMPT = """Ты работаешь с MCP tools базы знаний.
 Всегда сначала определяй intent и вызывай tools до финального ответа, если факт можно проверить.
