@@ -1,10 +1,10 @@
 {
-  "queries": 30,
+  "queries": 150,
   "top_k": 10,
   "rerank_enabled": true,
   "recall_at_10": 1.0,
-  "ndcg_at_10": 0.9488059063721063,
-  "mrr": 0.861111111111111,
+  "ndcg_at_10": 0.9926185950714292,
+  "mrr": 0.9733333333333334,
   "faithfulness_proxy_citation_coverage": 1.0,
-  "p95_latency_ms": 8.253503399964757
+  "p95_latency_ms": 4.1359577001003345
 }

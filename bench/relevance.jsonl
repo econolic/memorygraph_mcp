@@ -1,30 +1,150 @@
-{"qid":"q1","expected_sources":["doc_api_contract.md"]}
-{"qid":"q2","expected_sources":["doc_api_contract.md"]}
-{"qid":"q3","expected_sources":["doc_api_contract.md"]}
-{"qid":"q4","expected_sources":["doc_pipeline.md"]}
-{"qid":"q5","expected_sources":["doc_pipeline.md"]}
-{"qid":"q6","expected_sources":["doc_pipeline.md"]}
-{"qid":"q7","expected_sources":["doc_incident.md"]}
-{"qid":"q8","expected_sources":["doc_incident.md"]}
-{"qid":"q9","expected_sources":["doc_security.md"]}
-{"qid":"q10","expected_sources":["doc_security.md"]}
-{"qid":"q11","expected_sources":["doc_security.md","doc_auth_modes.md"]}
-{"qid":"q12","expected_sources":["doc_memory.md"]}
-{"qid":"q13","expected_sources":["doc_memory.md"]}
-{"qid":"q14","expected_sources":["doc_graph.md"]}
-{"qid":"q15","expected_sources":["doc_graph.md"]}
-{"qid":"q16","expected_sources":["doc_qdrant.md"]}
-{"qid":"q17","expected_sources":["doc_qdrant.md"]}
-{"qid":"q18","expected_sources":["doc_auth_modes.md"]}
-{"qid":"q19","expected_sources":["doc_auth_modes.md"]}
-{"qid":"q20","expected_sources":["doc_ingest_git.md"]}
-{"qid":"q21","expected_sources":["doc_ingest_git.md"]}
-{"qid":"q22","expected_sources":["doc_observability.md"]}
-{"qid":"q23","expected_sources":["doc_observability.md"]}
-{"qid":"q24","expected_sources":["doc_observability.md"]}
-{"qid":"q25","expected_sources":["doc_graph.md"]}
-{"qid":"q26","expected_sources":["doc_memory.md"]}
-{"qid":"q27","expected_sources":["doc_incident.md"]}
-{"qid":"q28","expected_sources":["doc_incident.md"]}
-{"qid":"q29","expected_sources":["doc_auth_modes.md"]}
-{"qid":"q30","expected_sources":["doc_graph.md"]}
+{"qid": "q1", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q2", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q3", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q4", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q5", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q6", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q7", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q8", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q9", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q10", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q11", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q12", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q13", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q14", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q15", "expected_sources": ["doc_api_contract.md"]}
+{"qid": "q16", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q17", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q18", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q19", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q20", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q21", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q22", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q23", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q24", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q25", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q26", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q27", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q28", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q29", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q30", "expected_sources": ["doc_auth_modes.md"]}
+{"qid": "q31", "expected_sources": ["doc_graph.md"]}
+{"qid": "q32", "expected_sources": ["doc_graph.md"]}
+{"qid": "q33", "expected_sources": ["doc_graph.md"]}
+{"qid": "q34", "expected_sources": ["doc_graph.md"]}
+{"qid": "q35", "expected_sources": ["doc_graph.md"]}
+{"qid": "q36", "expected_sources": ["doc_graph.md"]}
+{"qid": "q37", "expected_sources": ["doc_graph.md"]}
+{"qid": "q38", "expected_sources": ["doc_graph.md"]}
+{"qid": "q39", "expected_sources": ["doc_graph.md"]}
+{"qid": "q40", "expected_sources": ["doc_graph.md"]}
+{"qid": "q41", "expected_sources": ["doc_graph.md"]}
+{"qid": "q42", "expected_sources": ["doc_graph.md"]}
+{"qid": "q43", "expected_sources": ["doc_graph.md"]}
+{"qid": "q44", "expected_sources": ["doc_graph.md"]}
+{"qid": "q45", "expected_sources": ["doc_graph.md"]}
+{"qid": "q46", "expected_sources": ["doc_incident.md"]}
+{"qid": "q47", "expected_sources": ["doc_incident.md"]}
+{"qid": "q48", "expected_sources": ["doc_incident.md"]}
+{"qid": "q49", "expected_sources": ["doc_incident.md"]}
+{"qid": "q50", "expected_sources": ["doc_incident.md"]}
+{"qid": "q51", "expected_sources": ["doc_incident.md"]}
+{"qid": "q52", "expected_sources": ["doc_incident.md"]}
+{"qid": "q53", "expected_sources": ["doc_incident.md"]}
+{"qid": "q54", "expected_sources": ["doc_incident.md"]}
+{"qid": "q55", "expected_sources": ["doc_incident.md"]}
+{"qid": "q56", "expected_sources": ["doc_incident.md"]}
+{"qid": "q57", "expected_sources": ["doc_incident.md"]}
+{"qid": "q58", "expected_sources": ["doc_incident.md"]}
+{"qid": "q59", "expected_sources": ["doc_incident.md"]}
+{"qid": "q60", "expected_sources": ["doc_incident.md"]}
+{"qid": "q61", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q62", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q63", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q64", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q65", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q66", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q67", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q68", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q69", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q70", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q71", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q72", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q73", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q74", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q75", "expected_sources": ["doc_ingest_git.md"]}
+{"qid": "q76", "expected_sources": ["doc_memory.md"]}
+{"qid": "q77", "expected_sources": ["doc_memory.md"]}
+{"qid": "q78", "expected_sources": ["doc_memory.md"]}
+{"qid": "q79", "expected_sources": ["doc_memory.md"]}
+{"qid": "q80", "expected_sources": ["doc_memory.md"]}
+{"qid": "q81", "expected_sources": ["doc_memory.md"]}
+{"qid": "q82", "expected_sources": ["doc_memory.md"]}
+{"qid": "q83", "expected_sources": ["doc_memory.md"]}
+{"qid": "q84", "expected_sources": ["doc_memory.md"]}
+{"qid": "q85", "expected_sources": ["doc_memory.md"]}
+{"qid": "q86", "expected_sources": ["doc_memory.md"]}
+{"qid": "q87", "expected_sources": ["doc_memory.md"]}
+{"qid": "q88", "expected_sources": ["doc_memory.md"]}
+{"qid": "q89", "expected_sources": ["doc_memory.md"]}
+{"qid": "q90", "expected_sources": ["doc_memory.md"]}
+{"qid": "q91", "expected_sources": ["doc_observability.md"]}
+{"qid": "q92", "expected_sources": ["doc_observability.md"]}
+{"qid": "q93", "expected_sources": ["doc_observability.md"]}
+{"qid": "q94", "expected_sources": ["doc_observability.md"]}
+{"qid": "q95", "expected_sources": ["doc_observability.md"]}
+{"qid": "q96", "expected_sources": ["doc_observability.md"]}
+{"qid": "q97", "expected_sources": ["doc_observability.md"]}
+{"qid": "q98", "expected_sources": ["doc_observability.md"]}
+{"qid": "q99", "expected_sources": ["doc_observability.md"]}
+{"qid": "q100", "expected_sources": ["doc_observability.md"]}
+{"qid": "q101", "expected_sources": ["doc_observability.md"]}
+{"qid": "q102", "expected_sources": ["doc_observability.md"]}
+{"qid": "q103", "expected_sources": ["doc_observability.md"]}
+{"qid": "q104", "expected_sources": ["doc_observability.md"]}
+{"qid": "q105", "expected_sources": ["doc_observability.md"]}
+{"qid": "q106", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q107", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q108", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q109", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q110", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q111", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q112", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q113", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q114", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q115", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q116", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q117", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q118", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q119", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q120", "expected_sources": ["doc_pipeline.md"]}
+{"qid": "q121", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q122", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q123", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q124", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q125", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q126", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q127", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q128", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q129", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q130", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q131", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q132", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q133", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q134", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q135", "expected_sources": ["doc_qdrant.md"]}
+{"qid": "q136", "expected_sources": ["doc_security.md"]}
+{"qid": "q137", "expected_sources": ["doc_security.md"]}
+{"qid": "q138", "expected_sources": ["doc_security.md"]}
+{"qid": "q139", "expected_sources": ["doc_security.md"]}
+{"qid": "q140", "expected_sources": ["doc_security.md"]}
+{"qid": "q141", "expected_sources": ["doc_security.md"]}
+{"qid": "q142", "expected_sources": ["doc_security.md"]}
+{"qid": "q143", "expected_sources": ["doc_security.md"]}
+{"qid": "q144", "expected_sources": ["doc_security.md"]}
+{"qid": "q145", "expected_sources": ["doc_security.md"]}
+{"qid": "q146", "expected_sources": ["doc_security.md"]}
+{"qid": "q147", "expected_sources": ["doc_security.md"]}
+{"qid": "q148", "expected_sources": ["doc_security.md"]}
+{"qid": "q149", "expected_sources": ["doc_security.md"]}
+{"qid": "q150", "expected_sources": ["doc_security.md"]}

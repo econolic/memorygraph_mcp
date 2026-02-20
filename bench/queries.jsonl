@@ -1,30 +1,150 @@
-{"qid":"q1","query":"Where is API Z contract documented?"}
-{"qid":"q2","query":"Which service calls API Z?"}
-{"qid":"q3","query":"Which service depends on API Z for payment status?"}
-{"qid":"q4","query":"What tables does RevenuePipeline consume?"}
-{"qid":"q5","query":"Where does RevenuePipeline write output?"}
-{"qid":"q6","query":"What depends on RevenuePipeline?"}
-{"qid":"q7","query":"What to do when Neo4j is unavailable?"}
-{"qid":"q8","query":"Which services does Search depend on?"}
-{"qid":"q9","query":"What is ACL default policy?"}
-{"qid":"q10","query":"Where does strict mode identity come from?"}
-{"qid":"q11","query":"What is deprecated in dual mode?"}
-{"qid":"q12","query":"What does kb.memory.delete all_for_subject do?"}
-{"qid":"q13","query":"How is memory scoped?"}
-{"qid":"q14","query":"Which graph edges are required?"}
-{"qid":"q15","query":"List supported domain edges in graph"}
-{"qid":"q16","query":"What must Qdrant delete operations respect?"}
-{"qid":"q17","query":"What does rerank require besides query?"}
-{"qid":"q18","query":"How does auth mode dual resolve identity?"}
-{"qid":"q19","query":"What happens in strict mode without bearer token?"}
-{"qid":"q20","query":"How does git diff ingestion behave?"}
-{"qid":"q21","query":"Why are checksums persisted?"}
-{"qid":"q22","query":"What metrics are tracked in benchmark?"}
-{"qid":"q23","query":"What latency metric is used for hybrid search?"}
-{"qid":"q24","query":"What is in decision trace?"}
-{"qid":"q25","query":"What nodes exist in graph model?"}
-{"qid":"q26","query":"How to purge all user memory in workspace?"}
-{"qid":"q27","query":"What fallback is used during graph outage?"}
-{"qid":"q28","query":"Which runbook discusses Incident-42?"}
-{"qid":"q29","query":"What mode keeps compatibility with legacy ACL?"}
-{"qid":"q30","query":"What relation says one entity calls another?"}
+{"qid": "q1", "query": "Where is this documented: API Z contract docs/api_z_contract.md?"}
+{"qid": "q2", "query": "What does the KB state about API Z contract docs/api_z_contract.md?"}
+{"qid": "q3", "query": "Find evidence for API Z contract docs/api_z_contract.md."}
+{"qid": "q4", "query": "Explain API Z contract docs/api_z_contract.md."}
+{"qid": "q5", "query": "Source for API Z contract docs/api_z_contract.md?"}
+{"qid": "q6", "query": "Where is this documented: Service Gateway calls API Z for auth and profile retrieval?"}
+{"qid": "q7", "query": "What does the KB state about Service Gateway calls API Z for auth and profile retrieval?"}
+{"qid": "q8", "query": "Find evidence for Service Gateway calls API Z for auth and profile retrieval."}
+{"qid": "q9", "query": "Explain Service Gateway calls API Z for auth and profile retrieval."}
+{"qid": "q10", "query": "Source for Service Gateway calls API Z for auth and profile retrieval?"}
+{"qid": "q11", "query": "Where is this documented: Service Billing depends on API Z for payment status checks?"}
+{"qid": "q12", "query": "What does the KB state about Service Billing depends on API Z for payment status checks?"}
+{"qid": "q13", "query": "Find evidence for Service Billing depends on API Z for payment status checks."}
+{"qid": "q14", "query": "Explain Service Billing depends on API Z for payment status checks."}
+{"qid": "q15", "query": "Source for Service Billing depends on API Z for payment status checks?"}
+{"qid": "q16", "query": "Where is this documented: Auth mode dual precedence Authorization header payload jwt legacy ACL?"}
+{"qid": "q17", "query": "What does the KB state about Auth mode dual precedence Authorization header payload jwt legacy ACL?"}
+{"qid": "q18", "query": "Find evidence for Auth mode dual precedence Authorization header payload jwt legacy ACL."}
+{"qid": "q19", "query": "Explain Auth mode dual precedence Authorization header payload jwt legacy ACL."}
+{"qid": "q20", "query": "Source for Auth mode dual precedence Authorization header payload jwt legacy ACL?"}
+{"qid": "q21", "query": "Where is this documented: Auth mode strict rejects HTTP requests without valid bearer token?"}
+{"qid": "q22", "query": "What does the KB state about Auth mode strict rejects HTTP requests without valid bearer token?"}
+{"qid": "q23", "query": "Find evidence for Auth mode strict rejects HTTP requests without valid bearer token."}
+{"qid": "q24", "query": "Explain Auth mode strict rejects HTTP requests without valid bearer token."}
+{"qid": "q25", "query": "Source for Auth mode strict rejects HTTP requests without valid bearer token?"}
+{"qid": "q26", "query": "Where is this documented: legacy ACL deprecation in dual mode?"}
+{"qid": "q27", "query": "What does the KB state about legacy ACL deprecation in dual mode?"}
+{"qid": "q28", "query": "Find evidence for legacy ACL deprecation in dual mode."}
+{"qid": "q29", "query": "Explain legacy ACL deprecation in dual mode."}
+{"qid": "q30", "query": "Source for legacy ACL deprecation in dual mode?"}
+{"qid": "q31", "query": "Where is this documented: Graph model includes Document Chunk Entity nodes?"}
+{"qid": "q32", "query": "What does the KB state about Graph model includes Document Chunk Entity nodes?"}
+{"qid": "q33", "query": "Find evidence for Graph model includes Document Chunk Entity nodes."}
+{"qid": "q34", "query": "Explain Graph model includes Document Chunk Entity nodes."}
+{"qid": "q35", "query": "Source for Graph model includes Document Chunk Entity nodes?"}
+{"qid": "q36", "query": "Where is this documented: Graph edges CONTAINS MENTIONS DOCUMENTED_IN?"}
+{"qid": "q37", "query": "What does the KB state about Graph edges CONTAINS MENTIONS DOCUMENTED_IN?"}
+{"qid": "q38", "query": "Find evidence for Graph edges CONTAINS MENTIONS DOCUMENTED_IN."}
+{"qid": "q39", "query": "Explain Graph edges CONTAINS MENTIONS DOCUMENTED_IN."}
+{"qid": "q40", "query": "Source for Graph edges CONTAINS MENTIONS DOCUMENTED_IN?"}
+{"qid": "q41", "query": "Where is this documented: Domain edges DEPENDS_ON CALLS OWNS IMPLEMENTS AFFECTS?"}
+{"qid": "q42", "query": "What does the KB state about Domain edges DEPENDS_ON CALLS OWNS IMPLEMENTS AFFECTS?"}
+{"qid": "q43", "query": "Find evidence for Domain edges DEPENDS_ON CALLS OWNS IMPLEMENTS AFFECTS."}
+{"qid": "q44", "query": "Explain Domain edges DEPENDS_ON CALLS OWNS IMPLEMENTS AFFECTS."}
+{"qid": "q45", "query": "Source for Domain edges DEPENDS_ON CALLS OWNS IMPLEMENTS AFFECTS?"}
+{"qid": "q46", "query": "Where is this documented: Incident-42 Neo4j unavailable fallback to vector-only retrieval?"}
+{"qid": "q47", "query": "What does the KB state about Incident-42 Neo4j unavailable fallback to vector-only retrieval?"}
+{"qid": "q48", "query": "Find evidence for Incident-42 Neo4j unavailable fallback to vector-only retrieval."}
+{"qid": "q49", "query": "Explain Incident-42 Neo4j unavailable fallback to vector-only retrieval."}
+{"qid": "q50", "query": "Source for Incident-42 Neo4j unavailable fallback to vector-only retrieval?"}
+{"qid": "q51", "query": "Where is this documented: incident triage dependencies restart graph connector?"}
+{"qid": "q52", "query": "What does the KB state about incident triage dependencies restart graph connector?"}
+{"qid": "q53", "query": "Find evidence for incident triage dependencies restart graph connector."}
+{"qid": "q54", "query": "Explain incident triage dependencies restart graph connector."}
+{"qid": "q55", "query": "Source for incident triage dependencies restart graph connector?"}
+{"qid": "q56", "query": "Where is this documented: Service Search depends on Neo4j and Qdrant?"}
+{"qid": "q57", "query": "What does the KB state about Service Search depends on Neo4j and Qdrant?"}
+{"qid": "q58", "query": "Find evidence for Service Search depends on Neo4j and Qdrant."}
+{"qid": "q59", "query": "Explain Service Search depends on Neo4j and Qdrant."}
+{"qid": "q60", "query": "Source for Service Search depends on Neo4j and Qdrant?"}
+{"qid": "q61", "query": "Where is this documented: Git diff ingestion updates only changed files since reference commit?"}
+{"qid": "q62", "query": "What does the KB state about Git diff ingestion updates only changed files since reference commit?"}
+{"qid": "q63", "query": "Find evidence for Git diff ingestion updates only changed files since reference commit."}
+{"qid": "q64", "query": "Explain Git diff ingestion updates only changed files since reference commit."}
+{"qid": "q65", "query": "Source for Git diff ingestion updates only changed files since reference commit?"}
+{"qid": "q66", "query": "Where is this documented: Checksums persisted in metadata backend survive restarts?"}
+{"qid": "q67", "query": "What does the KB state about Checksums persisted in metadata backend survive restarts?"}
+{"qid": "q68", "query": "Find evidence for Checksums persisted in metadata backend survive restarts."}
+{"qid": "q69", "query": "Explain Checksums persisted in metadata backend survive restarts."}
+{"qid": "q70", "query": "Source for Checksums persisted in metadata backend survive restarts?"}
+{"qid": "q71", "query": "Where is this documented: Stale chunks deleted from vector and graph stores?"}
+{"qid": "q72", "query": "What does the KB state about Stale chunks deleted from vector and graph stores?"}
+{"qid": "q73", "query": "Find evidence for Stale chunks deleted from vector and graph stores."}
+{"qid": "q74", "query": "Explain Stale chunks deleted from vector and graph stores."}
+{"qid": "q75", "query": "Source for Stale chunks deleted from vector and graph stores?"}
+{"qid": "q76", "query": "Where is this documented: Memory write-back requires citations and confidence threshold?"}
+{"qid": "q77", "query": "What does the KB state about Memory write-back requires citations and confidence threshold?"}
+{"qid": "q78", "query": "Find evidence for Memory write-back requires citations and confidence threshold."}
+{"qid": "q79", "query": "Explain Memory write-back requires citations and confidence threshold."}
+{"qid": "q80", "query": "Source for Memory write-back requires citations and confidence threshold?"}
+{"qid": "q81", "query": "Where is this documented: kb.memory.delete all_for_subject full user purge?"}
+{"qid": "q82", "query": "What does the KB state about kb.memory.delete all_for_subject full user purge?"}
+{"qid": "q83", "query": "Find evidence for kb.memory.delete all_for_subject full user purge."}
+{"qid": "q84", "query": "Explain kb.memory.delete all_for_subject full user purge."}
+{"qid": "q85", "query": "Source for kb.memory.delete all_for_subject full user purge?"}
+{"qid": "q86", "query": "Where is this documented: Memory scoped by workspace_id and subject?"}
+{"qid": "q87", "query": "What does the KB state about Memory scoped by workspace_id and subject?"}
+{"qid": "q88", "query": "Find evidence for Memory scoped by workspace_id and subject."}
+{"qid": "q89", "query": "Explain Memory scoped by workspace_id and subject."}
+{"qid": "q90", "query": "Source for Memory scoped by workspace_id and subject?"}
+{"qid": "q91", "query": "Where is this documented: Benchmark tracks Recall@10 nDCG@10 and MRR?"}
+{"qid": "q92", "query": "What does the KB state about Benchmark tracks Recall@10 nDCG@10 and MRR?"}
+{"qid": "q93", "query": "Find evidence for Benchmark tracks Recall@10 nDCG@10 and MRR."}
+{"qid": "q94", "query": "Explain Benchmark tracks Recall@10 nDCG@10 and MRR."}
+{"qid": "q95", "query": "Source for Benchmark tracks Recall@10 nDCG@10 and MRR?"}
+{"qid": "q96", "query": "Where is this documented: Latency SLO for hybrid search measured via P95?"}
+{"qid": "q97", "query": "What does the KB state about Latency SLO for hybrid search measured via P95?"}
+{"qid": "q98", "query": "Find evidence for Latency SLO for hybrid search measured via P95."}
+{"qid": "q99", "query": "Explain Latency SLO for hybrid search measured via P95."}
+{"qid": "q100", "query": "Source for Latency SLO for hybrid search measured via P95?"}
+{"qid": "q101", "query": "Where is this documented: Decision trace includes policy_version intent auth metadata?"}
+{"qid": "q102", "query": "What does the KB state about Decision trace includes policy_version intent auth metadata?"}
+{"qid": "q103", "query": "Find evidence for Decision trace includes policy_version intent auth metadata."}
+{"qid": "q104", "query": "Explain Decision trace includes policy_version intent auth metadata."}
+{"qid": "q105", "query": "Source for Decision trace includes policy_version intent auth metadata?"}
+{"qid": "q106", "query": "Where is this documented: RevenuePipeline consumes finance.sales_daily and finance.refunds_daily?"}
+{"qid": "q107", "query": "What does the KB state about RevenuePipeline consumes finance.sales_daily and finance.refunds_daily?"}
+{"qid": "q108", "query": "Find evidence for RevenuePipeline consumes finance.sales_daily and finance.refunds_daily."}
+{"qid": "q109", "query": "Explain RevenuePipeline consumes finance.sales_daily and finance.refunds_daily."}
+{"qid": "q110", "query": "Source for RevenuePipeline consumes finance.sales_daily and finance.refunds_daily?"}
+{"qid": "q111", "query": "Where is this documented: RevenuePipeline writes into mart.revenue_fact?"}
+{"qid": "q112", "query": "What does the KB state about RevenuePipeline writes into mart.revenue_fact?"}
+{"qid": "q113", "query": "Find evidence for RevenuePipeline writes into mart.revenue_fact."}
+{"qid": "q114", "query": "Explain RevenuePipeline writes into mart.revenue_fact."}
+{"qid": "q115", "query": "Source for RevenuePipeline writes into mart.revenue_fact?"}
+{"qid": "q116", "query": "Where is this documented: RevenueReconcile depends on RevenuePipeline and calls Service Billing?"}
+{"qid": "q117", "query": "What does the KB state about RevenueReconcile depends on RevenuePipeline and calls Service Billing?"}
+{"qid": "q118", "query": "Find evidence for RevenueReconcile depends on RevenuePipeline and calls Service Billing."}
+{"qid": "q119", "query": "Explain RevenueReconcile depends on RevenuePipeline and calls Service Billing."}
+{"qid": "q120", "query": "Source for RevenueReconcile depends on RevenuePipeline and calls Service Billing?"}
+{"qid": "q121", "query": "Where is this documented: Qdrant vector store keeps chunk vectors and memory vectors?"}
+{"qid": "q122", "query": "What does the KB state about Qdrant vector store keeps chunk vectors and memory vectors?"}
+{"qid": "q123", "query": "Find evidence for Qdrant vector store keeps chunk vectors and memory vectors."}
+{"qid": "q124", "query": "Explain Qdrant vector store keeps chunk vectors and memory vectors."}
+{"qid": "q125", "query": "Source for Qdrant vector store keeps chunk vectors and memory vectors?"}
+{"qid": "q126", "query": "Where is this documented: Delete operations respect workspace and acl subject filters?"}
+{"qid": "q127", "query": "What does the KB state about Delete operations respect workspace and acl subject filters?"}
+{"qid": "q128", "query": "Find evidence for Delete operations respect workspace and acl subject filters."}
+{"qid": "q129", "query": "Explain Delete operations respect workspace and acl subject filters."}
+{"qid": "q130", "query": "Source for Delete operations respect workspace and acl subject filters?"}
+{"qid": "q131", "query": "Where is this documented: Rerank requires chunk text not URI-only scoring?"}
+{"qid": "q132", "query": "What does the KB state about Rerank requires chunk text not URI-only scoring?"}
+{"qid": "q133", "query": "Find evidence for Rerank requires chunk text not URI-only scoring."}
+{"qid": "q134", "query": "Explain Rerank requires chunk text not URI-only scoring."}
+{"qid": "q135", "query": "Source for Rerank requires chunk text not URI-only scoring?"}
+{"qid": "q136", "query": "Where is this documented: ACL policy deny-by-default?"}
+{"qid": "q137", "query": "What does the KB state about ACL policy deny-by-default?"}
+{"qid": "q138", "query": "Find evidence for ACL policy deny-by-default."}
+{"qid": "q139", "query": "Explain ACL policy deny-by-default."}
+{"qid": "q140", "query": "Source for ACL policy deny-by-default?"}
+{"qid": "q141", "query": "Where is this documented: Identity from Authorization Bearer token in strict mode?"}
+{"qid": "q142", "query": "What does the KB state about Identity from Authorization Bearer token in strict mode?"}
+{"qid": "q143", "query": "Find evidence for Identity from Authorization Bearer token in strict mode."}
+{"qid": "q144", "query": "Explain Identity from Authorization Bearer token in strict mode."}
+{"qid": "q145", "query": "Source for Identity from Authorization Bearer token in strict mode?"}
+{"qid": "q146", "query": "Where is this documented: Legacy payload ACL deprecated in dual mode?"}
+{"qid": "q147", "query": "What does the KB state about Legacy payload ACL deprecated in dual mode?"}
+{"qid": "q148", "query": "Find evidence for Legacy payload ACL deprecated in dual mode."}
+{"qid": "q149", "query": "Explain Legacy payload ACL deprecated in dual mode."}
+{"qid": "q150", "query": "Source for Legacy payload ACL deprecated in dual mode?"}
