@@ -90,6 +90,15 @@ Then run:
 docker compose up -d --build
 ```
 
+If Postgres permissions are too restrictive for metadata bootstrap, run:
+
+```sql
+GRANT USAGE, CREATE ON SCHEMA public TO <user>;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO <user>;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO <user>;
+```
+
 ## Register In Codex MCP
 
 Add this to `/root/.codex/config.toml`:

@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import MetaData, Table, create_engine, delete, insert, inspect, select
 from sqlalchemy import Column, String, Text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 
 class SQLMetadataStore:
@@ -56,13 +57,25 @@ class SQLMetadataStore:
             Column("checksum", String(256), nullable=False),
         )
 
-        self._meta.create_all(self._engine)
-        self._migrate_entities_primary_key_if_needed()
+        try:
+            self._meta.create_all(self._engine)
+            self._migrate_entities_primary_key_if_needed()
+        except SQLAlchemyError as exc:
+            if self._engine.dialect.name == "postgresql":
+                message = str(exc).lower()
+                if "permission denied" in message or "insufficient privilege" in message:
+                    username = self._engine.url.username or "<app_user>"
+                    raise RuntimeError(
+                        "Postgres metadata init failed due to insufficient privileges. "
+                        "Grant permissions and retry. Suggested SQL: "
+                        f"GRANT USAGE, CREATE ON SCHEMA public TO {username}; "
+                        f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {username}; "
+                        f"ALTER DEFAULT PRIVILEGES IN SCHEMA public "
+                        f"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {username};"
+                    ) from exc
+            raise
 
     def _migrate_entities_primary_key_if_needed(self) -> None:
-        if self._engine.dialect.name != "sqlite":
-            return
-
         inspector = inspect(self._engine)
         if "entities" not in set(inspector.get_table_names()):
             return
@@ -70,6 +83,22 @@ class SQLMetadataStore:
         pk = inspector.get_pk_constraint("entities")
         constrained = list(pk.get("constrained_columns") or [])
         if constrained == ["uri", "workspace_id"]:
+            return
+
+        if self._engine.dialect.name == "postgresql":
+            pk_name = pk.get("name")
+            with self._engine.begin() as conn:
+                if isinstance(pk_name, str) and pk_name:
+                    safe_pk = pk_name.replace('"', '""')
+                    conn.exec_driver_sql(
+                        f'ALTER TABLE entities DROP CONSTRAINT IF EXISTS "{safe_pk}"'
+                    )
+                conn.exec_driver_sql(
+                    "ALTER TABLE entities ADD CONSTRAINT entities_pkey PRIMARY KEY (uri, workspace_id)"
+                )
+            return
+
+        if self._engine.dialect.name != "sqlite":
             return
 
         with self._engine.begin() as conn:
