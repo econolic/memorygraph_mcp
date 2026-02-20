@@ -49,7 +49,10 @@ RUNTIME_TOOL_POLICY_PROMPT = """Ты работаешь с MCP tools базы з
 def _request_from_ctx(ctx: FastContext | None) -> Any | None:
     if ctx is None:
         return None
-    req_ctx = ctx.request_context
+    try:
+        req_ctx = ctx.request_context
+    except Exception:
+        return None
     return req_ctx.request if req_ctx is not None else None
 
 

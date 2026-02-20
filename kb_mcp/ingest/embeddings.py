@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import hashlib
+import math
 from typing import Protocol
 
 import httpx
@@ -27,11 +27,30 @@ class DeterministicFallbackEmbedder:
         return self._dimensions
 
     def _embed_one(self, text: str) -> list[float]:
-        digest = hashlib.sha256(text.encode("utf-8")).digest()
-        dense = [float(b) / 255.0 for b in digest]
-        if len(dense) >= self._dimensions:
-            return dense[:self._dimensions]
-        return dense + [0.0] * (self._dimensions - len(dense))
+        dense = [0.0] * self._dimensions
+        raw = text.encode("utf-8", errors="ignore")
+        if not raw:
+            return dense
+
+        for byte in raw:
+            idx = byte if byte < self._dimensions else byte % self._dimensions
+            dense[idx] += 1.0
+
+        # Lightweight non-hash lexical features in the tail if dimensions allow it.
+        if self._dimensions > 256:
+            words = text.split()
+            dense[256] = float(len(words))
+        if self._dimensions > 257:
+            dense[257] = float(len(text))
+        if self._dimensions > 258:
+            dense[258] = float(sum(ch.isdigit() for ch in text))
+        if self._dimensions > 259:
+            dense[259] = float(sum(ch.isupper() for ch in text))
+
+        norm = math.sqrt(sum(v * v for v in dense))
+        if norm <= 0.0:
+            return dense
+        return [v / norm for v in dense]
 
     def embed_query(self, text: str) -> list[float]:
         return self._embed_one(text)

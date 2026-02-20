@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import MetaData, Table, create_engine, delete, insert, select
+from sqlalchemy import MetaData, Table, create_engine, delete, insert, inspect, select
 from sqlalchemy import Column, String, Text
 from sqlalchemy.engine import Engine
 
@@ -37,7 +37,7 @@ class SQLMetadataStore:
             "entities",
             self._meta,
             Column("uri", String(512), primary_key=True),
-            Column("workspace_id", String(256), nullable=False, index=True),
+            Column("workspace_id", String(256), primary_key=True, nullable=False, index=True),
             Column("payload_json", Text, nullable=False),
         )
         self._memory = Table(
@@ -57,6 +57,39 @@ class SQLMetadataStore:
         )
 
         self._meta.create_all(self._engine)
+        self._migrate_entities_primary_key_if_needed()
+
+    def _migrate_entities_primary_key_if_needed(self) -> None:
+        if self._engine.dialect.name != "sqlite":
+            return
+
+        inspector = inspect(self._engine)
+        if "entities" not in set(inspector.get_table_names()):
+            return
+
+        pk = inspector.get_pk_constraint("entities")
+        constrained = list(pk.get("constrained_columns") or [])
+        if constrained == ["uri", "workspace_id"]:
+            return
+
+        with self._engine.begin() as conn:
+            conn.exec_driver_sql(
+                "CREATE TABLE IF NOT EXISTS entities__new ("
+                "uri VARCHAR(512) NOT NULL, "
+                "workspace_id VARCHAR(256) NOT NULL, "
+                "payload_json TEXT NOT NULL, "
+                "PRIMARY KEY (uri, workspace_id)"
+                ")"
+            )
+            conn.exec_driver_sql(
+                "INSERT INTO entities__new (uri, workspace_id, payload_json) "
+                "SELECT uri, workspace_id, payload_json FROM entities"
+            )
+            conn.exec_driver_sql("DROP TABLE entities")
+            conn.exec_driver_sql("ALTER TABLE entities__new RENAME TO entities")
+            conn.exec_driver_sql(
+                "CREATE INDEX IF NOT EXISTS ix_entities_workspace_id ON entities (workspace_id)"
+            )
 
     @staticmethod
     def _encode(data: dict[str, Any]) -> str:

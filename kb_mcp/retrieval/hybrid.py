@@ -23,6 +23,14 @@ class HybridRetriever:
         self._reranker = reranker
         self._weights = weights or FusionWeights()
 
+    @staticmethod
+    def _lexical_score(query: str, text: str) -> float:
+        q_tokens = {token for token in query.lower().split() if token}
+        if not q_tokens:
+            return 0.0
+        text_tokens = {token for token in text.lower().split() if token}
+        return float(len(q_tokens & text_tokens)) / float(len(q_tokens))
+
     def search(
         self,
         *,
@@ -65,12 +73,15 @@ class HybridRetriever:
             uri = f"kb://chunk/{hit.item_id}"
             graph_score = graph_bonus_by_uri.get(uri, 0.0)
             memory_score = float(memory_bonus_by_uri.get(uri, 0.0))
-            total = fuse_scores(
+            lexical_score = self._lexical_score(query, str(hit.payload.get("text", "")))
+            base_total = fuse_scores(
                 vector_score=hit.score,
                 graph_score=graph_score,
                 memory_score=memory_score,
                 weights=self._weights,
             )
+            # Keep baseline robust when rerank is disabled by blending lexical evidence.
+            total = 0.6 * base_total + 0.4 * lexical_score
             fused.append(
                 RetrievedItem(
                     uri=uri,
@@ -80,6 +91,7 @@ class HybridRetriever:
                         "vector": hit.score,
                         "graph": graph_score,
                         "memory": memory_score,
+                        "lexical": lexical_score,
                     },
                 )
             )
