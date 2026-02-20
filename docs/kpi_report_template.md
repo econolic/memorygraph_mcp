@@ -36,6 +36,8 @@
 
 ## Benchmark Commands
 
+Reference guide: `docs/install_deploy_config.md` (section: Benchmark and KPI Validation).
+
 ```bash
 python3 bench/run_benchmark.py --top-k 10 --enforce-gates --output bench/report_no_rerank.json
 python3 bench/run_benchmark.py --top-k 10 --rerank --enforce-gates --output bench/report_with_rerank.json

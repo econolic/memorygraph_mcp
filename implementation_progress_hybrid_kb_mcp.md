@@ -466,3 +466,24 @@
 - Риски/блокеры:
   - В тестах auth используется короткий HMAC secret (warning), не влияет на функциональность.
 - Следующий шаг: подготовить commit/release tag.
+
+### Запись
+- Этап: Documentation refresh guide
+- Статус: done
+- Дата/время: 2026-02-20T23:22:18Z
+- Изменённые файлы:
+  - `docs/install_deploy_config.md`
+  - `README.md`
+  - `docs/runbook.md`
+  - `docs/kpi_report_template.md`
+  - `implementation_progress_hybrid_kb_mcp.md`
+- Проверки (lint/type/unit/integration):
+  - docs QA: file/link existence checks for README/runbook references => OK
+  - docs QA: env var consistency check (`KB_*` in guide vs `.env.example`) => OK
+- Результат:
+  - Добавлен полный англоязычный operational guide по установке, разворачиванию и настройке MCP.
+  - `README.md` преобразован в краткую навигационную точку входа с quickstart.
+  - `runbook` дополнен кросс-ссылками на guide и разделом persistence recovery.
+  - В KPI template добавлена ссылка на benchmark/KPI section нового guide.
+- Риски/блокеры: нет
+- Следующий шаг: при необходимости прогнать финальный commit с docs-only изменениями.
