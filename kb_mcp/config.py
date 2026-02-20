@@ -8,11 +8,17 @@ from os import getenv
 class AppConfig:
     service_name: str = "hybrid-kb-mcp"
 
-    http_host: str = "0.0.0.0"
+    http_host: str = "127.0.0.1"
     http_port: int = 8080
+    auth_mode: str = "dual"
+    transport_security_enabled: bool = True
+    transport_allowed_hosts: tuple[str, ...] = ()
+    transport_allowed_origins: tuple[str, ...] = ()
 
     vector_backend: str = "qdrant"
     graph_backend: str = "neo4j"
+    metadata_backend: str = "sqlite"
+    metadata_dsn: str = "sqlite:///./.kb_mcp/metadata.db"
 
     qdrant_url: str = "http://qdrant:6333"
     qdrant_collection_chunks: str = "kb_chunks"
@@ -25,6 +31,12 @@ class AppConfig:
 
     jwt_secret: str = "change-me"
     jwt_algorithms: tuple[str, ...] = ("HS256",)
+
+    embedding_provider: str = "local"
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_base_url: str = ""
+    embedding_api_key: str = ""
+    embedding_dimensions: int = 384
 
     vector_timeout_s: float = 1.0
     graph_timeout_s: float = 1.0
@@ -43,10 +55,24 @@ class AppConfig:
     def from_env() -> "AppConfig":
         return AppConfig(
             service_name=getenv("KB_SERVICE_NAME", "hybrid-kb-mcp"),
-            http_host=getenv("KB_HTTP_HOST", "0.0.0.0"),
+            http_host=getenv("KB_HTTP_HOST", "127.0.0.1"),
             http_port=int(getenv("KB_HTTP_PORT", "8080")),
+            auth_mode=getenv("KB_AUTH_MODE", "dual"),
+            transport_security_enabled=getenv("KB_TRANSPORT_SECURITY_ENABLED", "true").lower() == "true",
+            transport_allowed_hosts=tuple(
+                item.strip()
+                for item in getenv("KB_TRANSPORT_ALLOWED_HOSTS", "").split(",")
+                if item.strip()
+            ),
+            transport_allowed_origins=tuple(
+                item.strip()
+                for item in getenv("KB_TRANSPORT_ALLOWED_ORIGINS", "").split(",")
+                if item.strip()
+            ),
             vector_backend=getenv("KB_VECTOR_BACKEND", "qdrant"),
             graph_backend=getenv("KB_GRAPH_BACKEND", "neo4j"),
+            metadata_backend=getenv("KB_METADATA_BACKEND", "sqlite"),
+            metadata_dsn=getenv("KB_METADATA_DSN", "sqlite:///./.kb_mcp/metadata.db"),
             qdrant_url=getenv("KB_QDRANT_URL", "http://qdrant:6333"),
             qdrant_collection_chunks=getenv("KB_QDRANT_COLLECTION_CHUNKS", "kb_chunks"),
             qdrant_collection_memory=getenv("KB_QDRANT_COLLECTION_MEMORY", "kb_memory"),
@@ -56,6 +82,11 @@ class AppConfig:
             neo4j_database=getenv("KB_NEO4J_DATABASE", "neo4j"),
             jwt_secret=getenv("KB_JWT_SECRET", "change-me"),
             jwt_algorithms=(getenv("KB_JWT_ALGORITHM", "HS256"),),
+            embedding_provider=getenv("KB_EMBEDDING_PROVIDER", "local"),
+            embedding_model=getenv("KB_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+            embedding_base_url=getenv("KB_EMBEDDING_BASE_URL", ""),
+            embedding_api_key=getenv("KB_EMBEDDING_API_KEY", ""),
+            embedding_dimensions=int(getenv("KB_EMBEDDING_DIMENSIONS", "384")),
             vector_timeout_s=float(getenv("KB_VECTOR_TIMEOUT_S", "1.0")),
             graph_timeout_s=float(getenv("KB_GRAPH_TIMEOUT_S", "1.0")),
             rerank_timeout_s=float(getenv("KB_RERANK_TIMEOUT_S", "2.0")),

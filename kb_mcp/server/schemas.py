@@ -7,9 +7,9 @@ from pydantic import BaseModel, Field
 
 
 class AclSubject(BaseModel):
-    subject: str
+    subject: str = "anonymous"
     roles: list[str] = Field(default_factory=list)
-    workspace_id: str
+    workspace_id: str = "default"
     jwt_bearer: str | None = None
 
 
@@ -17,7 +17,7 @@ class SearchFilters(BaseModel):
     tags: list[str] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
     updated_after: datetime | None = None
-    acl: AclSubject
+    acl: AclSubject = Field(default_factory=AclSubject)
 
 
 class GraphParams(BaseModel):
@@ -92,7 +92,7 @@ class KbGraphExpandInput(BaseModel):
     edge_types: list[str] = Field(default_factory=list)
     max_nodes: int = 200
     workspace_id: str
-    subject: str
+    subject: str = ""
 
 
 class KbGraphExpandOutput(BaseModel):
@@ -104,7 +104,7 @@ class KbGraphExpandOutput(BaseModel):
 class KbExplainInput(BaseModel):
     uris: list[str]
     workspace_id: str
-    subject: str
+    subject: str = ""
 
 
 class KbExplainOutput(BaseModel):
@@ -121,7 +121,7 @@ class MemoryUpsertItem(BaseModel):
 
 class KbMemoryUpsertInput(BaseModel):
     workspace_id: str
-    subject: str
+    subject: str = ""
     session_id: str
     items: list[MemoryUpsertItem]
 
@@ -134,7 +134,7 @@ class KbMemoryUpsertOutput(BaseModel):
 class KbMemorySearchInput(BaseModel):
     query: str
     workspace_id: str
-    subject: str
+    subject: str = ""
     session_id: str
     top_k: int = 10
 
@@ -145,7 +145,7 @@ class KbMemorySearchOutput(BaseModel):
 
 class KbMemoryDeleteInput(BaseModel):
     workspace_id: str
-    subject: str
+    subject: str = ""
     ids: list[str] = Field(default_factory=list)
     all_for_subject: bool = False
 

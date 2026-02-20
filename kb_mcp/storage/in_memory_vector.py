@@ -68,3 +68,14 @@ class InMemoryVectorStore:
                 del self._memory[memory_id]
                 deleted += 1
         return deleted
+
+    def delete_chunks(self, *, chunk_ids: list[str], filters: dict[str, object]) -> int:
+        deleted = 0
+        for chunk_id in chunk_ids:
+            item = self._chunks.get(chunk_id)
+            if item is None:
+                continue
+            if self._matches_filter(item.payload, filters):
+                del self._chunks[chunk_id]
+                deleted += 1
+        return deleted

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from kb_mcp.storage.metadata_store import MetadataStore
+from kb_mcp.storage.metadata_store import MetadataRepository
 
 
 @dataclass(frozen=True)
@@ -17,7 +17,7 @@ class EvidenceItem:
 
 
 class EvidenceBuilder:
-    def __init__(self, metadata: MetadataStore) -> None:
+    def __init__(self, metadata: MetadataRepository) -> None:
         self._metadata = metadata
 
     def build(self, *, uri: str, score: float, breakdown: dict[str, float]) -> EvidenceItem:

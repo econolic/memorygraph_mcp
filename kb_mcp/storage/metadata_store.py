@@ -1,6 +1,50 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
+
+
+class MetadataRepository(Protocol):
+    def put_doc(self, uri: str, data: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    def put_chunk(self, uri: str, data: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    def put_entity(self, uri: str, data: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    def put_memory(self, uri: str, data: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    def get_doc(self, uri: str) -> dict[str, Any] | None:
+        raise NotImplementedError
+
+    def get_chunk(self, uri: str) -> dict[str, Any] | None:
+        raise NotImplementedError
+
+    def get_entity(self, uri: str) -> dict[str, Any] | None:
+        raise NotImplementedError
+
+    def get_memory(self, uri: str) -> dict[str, Any] | None:
+        raise NotImplementedError
+
+    def delete_memory(self, uri: str) -> bool:
+        raise NotImplementedError
+
+    def list_memory(self, *, workspace_id: str, subject: str) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    def list_chunks_by_doc(self, *, doc_uri: str) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    def delete_chunk(self, *, uri: str) -> bool:
+        raise NotImplementedError
+
+    def get_checksum(self, *, workspace_id: str, source_path: str) -> str | None:
+        raise NotImplementedError
+
+    def set_checksum(self, *, workspace_id: str, source_path: str, checksum: str) -> None:
+        raise NotImplementedError
 
 
 class MetadataStore:
@@ -9,6 +53,7 @@ class MetadataStore:
         self._chunks: dict[str, dict[str, Any]] = {}
         self._entities: dict[str, dict[str, Any]] = {}
         self._memory: dict[str, dict[str, Any]] = {}
+        self._checksums: dict[tuple[str, str], str] = {}
 
     def put_doc(self, uri: str, data: dict[str, Any]) -> None:
         self._docs[uri] = data
@@ -43,3 +88,19 @@ class MetadataStore:
             if item.get("workspace_id") == workspace_id and item.get("subject") == subject:
                 out.append(item)
         return out
+
+    def list_chunks_by_doc(self, *, doc_uri: str) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for chunk in self._chunks.values():
+            if chunk.get("doc_uri") == doc_uri:
+                out.append(chunk)
+        return out
+
+    def delete_chunk(self, *, uri: str) -> bool:
+        return self._chunks.pop(uri, None) is not None
+
+    def get_checksum(self, *, workspace_id: str, source_path: str) -> str | None:
+        return self._checksums.get((workspace_id, source_path))
+
+    def set_checksum(self, *, workspace_id: str, source_path: str, checksum: str) -> None:
+        self._checksums[(workspace_id, source_path)] = checksum

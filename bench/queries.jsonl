@@ -1,0 +1,30 @@
+{"qid":"q1","query":"Where is API Z contract documented?"}
+{"qid":"q2","query":"Which service calls API Z?"}
+{"qid":"q3","query":"Which service depends on API Z for payment status?"}
+{"qid":"q4","query":"What tables does RevenuePipeline consume?"}
+{"qid":"q5","query":"Where does RevenuePipeline write output?"}
+{"qid":"q6","query":"What depends on RevenuePipeline?"}
+{"qid":"q7","query":"What to do when Neo4j is unavailable?"}
+{"qid":"q8","query":"Which services does Search depend on?"}
+{"qid":"q9","query":"What is ACL default policy?"}
+{"qid":"q10","query":"Where does strict mode identity come from?"}
+{"qid":"q11","query":"What is deprecated in dual mode?"}
+{"qid":"q12","query":"What does kb.memory.delete all_for_subject do?"}
+{"qid":"q13","query":"How is memory scoped?"}
+{"qid":"q14","query":"Which graph edges are required?"}
+{"qid":"q15","query":"List supported domain edges in graph"}
+{"qid":"q16","query":"What must Qdrant delete operations respect?"}
+{"qid":"q17","query":"What does rerank require besides query?"}
+{"qid":"q18","query":"How does auth mode dual resolve identity?"}
+{"qid":"q19","query":"What happens in strict mode without bearer token?"}
+{"qid":"q20","query":"How does git diff ingestion behave?"}
+{"qid":"q21","query":"Why are checksums persisted?"}
+{"qid":"q22","query":"What metrics are tracked in benchmark?"}
+{"qid":"q23","query":"What latency metric is used for hybrid search?"}
+{"qid":"q24","query":"What is in decision trace?"}
+{"qid":"q25","query":"What nodes exist in graph model?"}
+{"qid":"q26","query":"How to purge all user memory in workspace?"}
+{"qid":"q27","query":"What fallback is used during graph outage?"}
+{"qid":"q28","query":"Which runbook discusses Incident-42?"}
+{"qid":"q29","query":"What mode keeps compatibility with legacy ACL?"}
+{"qid":"q30","query":"What relation says one entity calls another?"}

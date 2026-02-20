@@ -20,6 +20,9 @@ class AuditLogger:
         params: dict[str, Any],
         result_count: int,
         latency_ms: int,
+        auth_mode: str | None = None,
+        identity_source: str | None = None,
+        acl_decision: str | None = None,
     ) -> None:
         params_hash = hashlib.sha256(json.dumps(params, sort_keys=True).encode("utf-8")).hexdigest()
         self._log.info(
@@ -32,6 +35,9 @@ class AuditLogger:
                     "params_hash": params_hash,
                     "result_count": result_count,
                     "latency_ms": latency_ms,
+                    "auth_mode": auth_mode,
+                    "identity_source": identity_source,
+                    "acl_decision": acl_decision,
                     "timestamp": datetime.now(tz=timezone.utc).isoformat(),
                 }
             },

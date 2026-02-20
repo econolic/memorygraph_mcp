@@ -44,3 +44,6 @@ class VectorStore(Protocol):
 
     def delete_memory(self, *, memory_ids: list[str], filters: dict[str, object]) -> int:
         raise NotImplementedError
+
+    def delete_chunks(self, *, chunk_ids: list[str], filters: dict[str, object]) -> int:
+        raise NotImplementedError

@@ -1,16 +1,17 @@
 from __future__ import annotations
 
-import uuid
 from time import perf_counter
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 from kb_mcp.bootstrap import AppDeps, build_deps
 from kb_mcp.observability.tracing import ensure_request_id
 from kb_mcp.retrieval.rerank import RerankConfig
 from kb_mcp.retrieval.router import POLICY_VERSION, QueryRouter
 from kb_mcp.security.acl import AccessContext
+from kb_mcp.security.auth import AuthResolution
 from kb_mcp.server.schemas import (
     Citation,
     EntityRef,
@@ -30,6 +31,8 @@ from kb_mcp.server.schemas import (
     SearchResult,
 )
 
+FastContext = Context[Any, Any, Any]
+
 RUNTIME_TOOL_POLICY_PROMPT = """Ты работаешь с MCP tools базы знаний.
 Всегда сначала определяй intent и вызывай tools до финального ответа, если факт можно проверить.
 Обязательный порядок:
@@ -43,23 +46,52 @@ RUNTIME_TOOL_POLICY_PROMPT = """Ты работаешь с MCP tools базы з
 Если graph недоступен, деградируй на vector evidence и укажи ограничение."""
 
 
-def _ctx_from_acl(deps: AppDeps, acl: dict[str, Any]) -> AccessContext:
-    token = acl.get("jwt_bearer")
-    if isinstance(token, str) and token:
-        parsed = deps.auth.parse_bearer(token)
-        if parsed.ok and parsed.ctx is not None:
-            return parsed.ctx
+def _request_from_ctx(ctx: FastContext | None) -> Any | None:
+    if ctx is None:
+        return None
+    req_ctx = ctx.request_context
+    return req_ctx.request if req_ctx is not None else None
 
-    return AccessContext(
-        subject=str(acl.get("subject", "anonymous")),
-        roles=tuple(str(role) for role in acl.get("roles", [])),
-        workspace_id=str(acl.get("workspace_id", "default")),
-    )
+
+def _legacy_acl(*, workspace_id: str, subject: str) -> dict[str, Any]:
+    return {
+        "workspace_id": workspace_id,
+        "subject": subject,
+        "roles": [],
+        "jwt_bearer": None,
+    }
+
+
+def _resource_allowed(*, deps: AppDeps, auth_ctx: AccessContext, data: dict[str, Any]) -> bool:
+    workspace_id = str(data.get("workspace_id", "")).strip()
+    if workspace_id and workspace_id != auth_ctx.workspace_id:
+        return False
+    acl_allow_raw = data.get("acl_allow")
+    acl_allow = [str(v) for v in acl_allow_raw] if isinstance(acl_allow_raw, list) else None
+    return deps.acl.can_read(ctx=auth_ctx, acl_allow=acl_allow)
 
 
 def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
     deps = deps or build_deps()
     cfg = deps.config
+
+    transport_security = None
+    if cfg.transport_security_enabled:
+        allowed_hosts = list(cfg.transport_allowed_hosts) or [
+            "127.0.0.1:*",
+            "localhost:*",
+            "[::1]:*",
+        ]
+        allowed_origins = list(cfg.transport_allowed_origins) or [
+            "http://127.0.0.1:*",
+            "http://localhost:*",
+            "http://[::1]:*",
+        ]
+        transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=allowed_hosts,
+            allowed_origins=allowed_origins,
+        )
 
     mcp = FastMCP(
         cfg.service_name,
@@ -68,22 +100,52 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         host=cfg.http_host,
         port=cfg.http_port,
         streamable_http_path="/mcp",
+        transport_security=transport_security,
     )
     router = QueryRouter()
 
+    def resolve_identity(payload_acl: dict[str, Any] | None, ctx: FastContext | None) -> AuthResolution:
+        return deps.auth.resolve_identity(
+            request=_request_from_ctx(ctx),
+            payload_acl=payload_acl,
+            allow_legacy_payload=True,
+        )
+
+    def audit_tool(
+        *,
+        auth: AuthResolution,
+        tool: str,
+        params: dict[str, Any],
+        result_count: int,
+        latency_ms: int,
+        acl_decision: str,
+    ) -> None:
+        deps.audit.log_call(
+            subject=auth.ctx.subject,
+            workspace_id=auth.ctx.workspace_id,
+            tool=tool,
+            params=params,
+            result_count=result_count,
+            latency_ms=latency_ms,
+            auth_mode=auth.auth_mode,
+            identity_source=auth.identity_source,
+            acl_decision=acl_decision,
+        )
+
     @mcp.tool(name="kb.search")
-    def kb_search(payload: KbSearchInput) -> KbSearchOutput:
+    def kb_search(payload: KbSearchInput, ctx: FastContext | None = None) -> KbSearchOutput:
         request_id = ensure_request_id()
         t0 = perf_counter()
 
-        ctx = _ctx_from_acl(deps, payload.filters.acl.model_dump())
-        filters = deps.acl.apply_filters(ctx=ctx, filters=payload.filters.model_dump())
-        filters["workspace_id"] = payload.workspace_id
+        auth = resolve_identity(payload.filters.acl.model_dump(), ctx)
+        acl_filters = deps.acl.apply_filters(ctx=auth.ctx, filters=payload.filters.model_dump())
+        search_workspace = auth.ctx.workspace_id
+        acl_filters["workspace_id"] = search_workspace
 
         memory_hits = deps.memory.search(
             query=payload.query,
-            workspace_id=payload.workspace_id,
-            subject=ctx.subject,
+            workspace_id=search_workspace,
+            subject=auth.ctx.subject,
             top_k=min(5, payload.top_k),
         ) if payload.include_memory else []
 
@@ -107,7 +169,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         items, debug = deps.retriever.search(
             query=payload.query,
             top_k=min(payload.top_k, cfg.max_top_k),
-            filters=filters,
+            filters=acl_filters,
             depth=min(depth, cfg.max_expand_depth),
             edge_types=edge_types,
             max_nodes=payload.graph.max_nodes,
@@ -131,7 +193,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
             )
 
         output = KbSearchOutput(
-            query_id=str(uuid.uuid4()),
+            query_id=request_id,
             results=results,
             memory_hits=[
                 MemoryHit(uri=hit.uri, score=hit.score, text=deps.redact.redact(hit.text), citations=hit.citations)
@@ -144,6 +206,8 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
                 "intent": routed.intent,
                 "recommended_tools": list(routed.recommended_tools),
                 "policy_version": POLICY_VERSION,
+                "auth_mode": auth.auth_mode,
+                "identity_source": auth.identity_source,
                 "rerank_provider": payload.rerank.provider,
             },
             debug={
@@ -151,24 +215,28 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
                 "fallback_mode": debug.fallback_mode,
                 "fallback_reason": debug.fallback_reason,
                 "filters_applied": True,
+                "deprecated_legacy_acl": auth.deprecated_legacy_acl,
+                "payload_workspace_ignored": payload.workspace_id != auth.ctx.workspace_id,
             },
         )
 
         deps.metrics.inc("tool.kb.search.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
-        deps.audit.log_call(
-            subject=ctx.subject,
-            workspace_id=payload.workspace_id,
+        audit_tool(
+            auth=auth,
             tool="kb.search",
             params=payload.model_dump(),
             result_count=len(results),
             latency_ms=latency_ms,
+            acl_decision="applied",
         )
         return output
 
     @mcp.tool(name="kb.graph_expand")
-    def kb_graph_expand(payload: KbGraphExpandInput) -> KbGraphExpandOutput:
-        filters: dict[str, object] = {"workspace_id": payload.workspace_id, "acl_subject": payload.subject}
+    def kb_graph_expand(payload: KbGraphExpandInput, ctx: FastContext | None = None) -> KbGraphExpandOutput:
+        t0 = perf_counter()
+        auth = resolve_identity(_legacy_acl(workspace_id=payload.workspace_id, subject=payload.subject), ctx)
+        filters: dict[str, object] = {"workspace_id": auth.ctx.workspace_id, "acl_subject": auth.ctx.subject}
         nodes, edges = deps.graph_store.expand(
             seed_uris=payload.seed_entities,
             depth=payload.depth,
@@ -183,11 +251,22 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
             paths=paths,
         )
         deps.metrics.inc("tool.kb.graph_expand.calls")
+        latency_ms = int((perf_counter() - t0) * 1000)
+        audit_tool(
+            auth=auth,
+            tool="kb.graph_expand",
+            params=payload.model_dump(),
+            result_count=len(edges),
+            latency_ms=latency_ms,
+            acl_decision="applied",
+        )
         return out
 
     @mcp.tool(name="kb.explain")
-    def kb_explain(payload: KbExplainInput) -> KbExplainOutput:
-        filters: dict[str, object] = {"workspace_id": payload.workspace_id, "acl_subject": payload.subject}
+    def kb_explain(payload: KbExplainInput, ctx: FastContext | None = None) -> KbExplainOutput:
+        t0 = perf_counter()
+        auth = resolve_identity(_legacy_acl(workspace_id=payload.workspace_id, subject=payload.subject), ctx)
+        filters: dict[str, object] = {"workspace_id": auth.ctx.workspace_id, "acl_subject": auth.ctx.subject}
         explanations: list[dict[str, Any]] = []
         for uri in payload.uris:
             graph_reasons = deps.graph_store.explain_uri(uri=uri, filters=filters)
@@ -195,28 +274,59 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
             reasons.insert(0, {"type": "vector", "detail": "score derived from vector similarity + fusion + rerank"})
             explanations.append({"uri": uri, "reasons": reasons})
         deps.metrics.inc("tool.kb.explain.calls")
+        latency_ms = int((perf_counter() - t0) * 1000)
+        audit_tool(
+            auth=auth,
+            tool="kb.explain",
+            params=payload.model_dump(),
+            result_count=len(explanations),
+            latency_ms=latency_ms,
+            acl_decision="applied",
+        )
         return KbExplainOutput(explanations=explanations)
 
     @mcp.tool(name="kb.memory.upsert")
-    def kb_memory_upsert(payload: KbMemoryUpsertInput) -> KbMemoryUpsertOutput:
+    def kb_memory_upsert(payload: KbMemoryUpsertInput, ctx: FastContext | None = None) -> KbMemoryUpsertOutput:
+        t0 = perf_counter()
+        auth = resolve_identity(_legacy_acl(workspace_id=payload.workspace_id, subject=payload.subject), ctx)
         stored_ids, report = deps.memory.upsert(
-            workspace_id=payload.workspace_id,
-            subject=payload.subject,
+            workspace_id=auth.ctx.workspace_id,
+            subject=auth.ctx.subject,
             session_id=payload.session_id,
             items=[item.model_dump() for item in payload.items],
         )
         deps.metrics.inc("tool.kb.memory.upsert.calls")
+        latency_ms = int((perf_counter() - t0) * 1000)
+        audit_tool(
+            auth=auth,
+            tool="kb.memory.upsert",
+            params=payload.model_dump(),
+            result_count=len(stored_ids),
+            latency_ms=latency_ms,
+            acl_decision="applied",
+        )
         return KbMemoryUpsertOutput(stored_ids=stored_ids, validation_report=report)
 
     @mcp.tool(name="kb.memory.search")
-    def kb_memory_search(payload: KbMemorySearchInput) -> KbMemorySearchOutput:
+    def kb_memory_search(payload: KbMemorySearchInput, ctx: FastContext | None = None) -> KbMemorySearchOutput:
+        t0 = perf_counter()
+        auth = resolve_identity(_legacy_acl(workspace_id=payload.workspace_id, subject=payload.subject), ctx)
         hits = deps.memory.search(
             query=payload.query,
-            workspace_id=payload.workspace_id,
-            subject=payload.subject,
+            workspace_id=auth.ctx.workspace_id,
+            subject=auth.ctx.subject,
             top_k=payload.top_k,
         )
         deps.metrics.inc("tool.kb.memory.search.calls")
+        latency_ms = int((perf_counter() - t0) * 1000)
+        audit_tool(
+            auth=auth,
+            tool="kb.memory.search",
+            params=payload.model_dump(),
+            result_count=len(hits),
+            latency_ms=latency_ms,
+            acl_decision="applied",
+        )
         return KbMemorySearchOutput(
             results=[
                 MemoryHit(uri=hit.uri, score=hit.score, text=deps.redact.redact(hit.text), citations=hit.citations)
@@ -225,57 +335,149 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         )
 
     @mcp.tool(name="kb.memory.delete")
-    def kb_memory_delete(payload: KbMemoryDeleteInput) -> KbMemoryDeleteOutput:
+    def kb_memory_delete(payload: KbMemoryDeleteInput, ctx: FastContext | None = None) -> KbMemoryDeleteOutput:
+        t0 = perf_counter()
+        auth = resolve_identity(_legacy_acl(workspace_id=payload.workspace_id, subject=payload.subject), ctx)
         deleted = deps.memory.delete(
-            workspace_id=payload.workspace_id,
-            subject=payload.subject,
+            workspace_id=auth.ctx.workspace_id,
+            subject=auth.ctx.subject,
             ids=payload.ids,
             all_for_subject=payload.all_for_subject,
         )
         deps.metrics.inc("tool.kb.memory.delete.calls")
+        latency_ms = int((perf_counter() - t0) * 1000)
+        audit_tool(
+            auth=auth,
+            tool="kb.memory.delete",
+            params=payload.model_dump(),
+            result_count=deleted,
+            latency_ms=latency_ms,
+            acl_decision="applied",
+        )
         return KbMemoryDeleteOutput(deleted_count=deleted)
 
     @mcp.tool(name="kb.ingest.filesystem")
-    def kb_ingest_filesystem(root_path: str, workspace_id: str, acl_subject: str) -> dict[str, int]:
-        result = deps.ingestion.ingest_filesystem(root=root_path, workspace_id=workspace_id, acl_allow=[acl_subject])
+    def kb_ingest_filesystem(
+        root_path: str,
+        workspace_id: str,
+        acl_subject: str,
+        ctx: FastContext | None = None,
+    ) -> dict[str, int]:
+        t0 = perf_counter()
+        auth = resolve_identity(_legacy_acl(workspace_id=workspace_id, subject=acl_subject), ctx)
+        result = deps.ingestion.ingest_filesystem(
+            root=root_path,
+            workspace_id=auth.ctx.workspace_id,
+            acl_allow=[auth.ctx.subject],
+        )
         deps.metrics.inc("tool.kb.ingest.filesystem.calls")
+        latency_ms = int((perf_counter() - t0) * 1000)
+        audit_tool(
+            auth=auth,
+            tool="kb.ingest.filesystem",
+            params={"root_path": root_path, "workspace_id": workspace_id, "acl_subject": acl_subject},
+            result_count=result.get("created", 0) + result.get("updated", 0),
+            latency_ms=latency_ms,
+            acl_decision="applied",
+        )
+        return result
+
+    @mcp.tool(name="kb.ingest.git_diff")
+    def kb_ingest_git_diff(
+        repo_root: str,
+        workspace_id: str,
+        acl_subject: str,
+        since_ref: str = "HEAD~1",
+        ctx: FastContext | None = None,
+    ) -> dict[str, int]:
+        t0 = perf_counter()
+        auth = resolve_identity(_legacy_acl(workspace_id=workspace_id, subject=acl_subject), ctx)
+        result = deps.ingestion.ingest_git_diff(
+            root=repo_root,
+            workspace_id=auth.ctx.workspace_id,
+            acl_allow=[auth.ctx.subject],
+            since_ref=since_ref,
+        )
+        deps.metrics.inc("tool.kb.ingest.git_diff.calls")
+        latency_ms = int((perf_counter() - t0) * 1000)
+        audit_tool(
+            auth=auth,
+            tool="kb.ingest.git_diff",
+            params={
+                "repo_root": repo_root,
+                "workspace_id": workspace_id,
+                "acl_subject": acl_subject,
+                "since_ref": since_ref,
+            },
+            result_count=result.get("created", 0) + result.get("updated", 0),
+            latency_ms=latency_ms,
+            acl_decision="applied",
+        )
         return result
 
     @mcp.resource("kb://doc/{doc_id}")
-    def resource_doc(doc_id: str) -> dict[str, Any]:
+    def resource_doc(doc_id: str, ctx: FastContext | None = None) -> dict[str, Any]:
         uri = f"kb://doc/{doc_id}"
         doc = deps.metadata.get_doc(uri)
         if doc is None:
             return {"error": "not_found", "uri": uri}
+        auth = deps.auth.resolve_identity(
+            request=_request_from_ctx(ctx),
+            payload_acl=None,
+            allow_legacy_payload=False,
+        )
+        if not _resource_allowed(deps=deps, auth_ctx=auth.ctx, data=doc):
+            return {"error": "forbidden", "uri": uri}
         out = dict(doc)
         if "text" in out:
             out["text"] = deps.redact.redact(str(out["text"]))
         return out
 
     @mcp.resource("kb://chunk/{chunk_id}")
-    def resource_chunk(chunk_id: str) -> dict[str, Any]:
+    def resource_chunk(chunk_id: str, ctx: FastContext | None = None) -> dict[str, Any]:
         uri = f"kb://chunk/{chunk_id}"
         chunk = deps.metadata.get_chunk(uri)
         if chunk is None:
             return {"error": "not_found", "uri": uri}
+        auth = deps.auth.resolve_identity(
+            request=_request_from_ctx(ctx),
+            payload_acl=None,
+            allow_legacy_payload=False,
+        )
+        if not _resource_allowed(deps=deps, auth_ctx=auth.ctx, data=chunk):
+            return {"error": "forbidden", "uri": uri}
         out = dict(chunk)
         out["text"] = deps.redact.redact(str(out.get("text", "")))
         return out
 
     @mcp.resource("kb://entity/{entity_id}")
-    def resource_entity(entity_id: str) -> dict[str, Any]:
+    def resource_entity(entity_id: str, ctx: FastContext | None = None) -> dict[str, Any]:
         uri = f"kb://entity/{entity_id}"
         entity = deps.metadata.get_entity(uri)
         if entity is None:
             return {"uri": uri, "type": "Entity", "name": entity_id, "links": []}
+        auth = deps.auth.resolve_identity(
+            request=_request_from_ctx(ctx),
+            payload_acl=None,
+            allow_legacy_payload=False,
+        )
+        if not _resource_allowed(deps=deps, auth_ctx=auth.ctx, data=entity):
+            return {"error": "forbidden", "uri": uri}
         return entity
 
     @mcp.resource("kb://memory/{memory_id}")
-    def resource_memory(memory_id: str) -> dict[str, Any]:
+    def resource_memory(memory_id: str, ctx: FastContext | None = None) -> dict[str, Any]:
         uri = f"kb://memory/{memory_id}"
         memory = deps.metadata.get_memory(uri)
         if memory is None:
             return {"error": "not_found", "uri": uri}
+        auth = deps.auth.resolve_identity(
+            request=_request_from_ctx(ctx),
+            payload_acl=None,
+            allow_legacy_payload=False,
+        )
+        if not _resource_allowed(deps=deps, auth_ctx=auth.ctx, data=memory):
+            return {"error": "forbidden", "uri": uri}
         out = dict(memory)
         out["text"] = deps.redact.redact(str(out.get("text", "")))
         return out

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from kb_mcp.memory.validator import MemoryFactValidator, ValidationResult
 from kb_mcp.retrieval.vector_store import VectorStore
 from kb_mcp.retrieval.graph_store import GraphStore
-from kb_mcp.storage.metadata_store import MetadataStore
+from kb_mcp.storage.metadata_store import MetadataRepository
 
 
 @dataclass(frozen=True)
@@ -24,7 +24,7 @@ class MemoryService:
         *,
         vector_store: VectorStore,
         graph_store: GraphStore,
-        metadata: MetadataStore,
+        metadata: MetadataRepository,
         validator: MemoryFactValidator,
     ) -> None:
         self._vector = vector_store

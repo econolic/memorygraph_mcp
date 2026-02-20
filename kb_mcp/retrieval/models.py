@@ -28,6 +28,7 @@ class GraphEdge:
 @dataclass(frozen=True)
 class RetrievedItem:
     uri: str
+    text: str
     score: float
     score_breakdown: dict[str, float]
 

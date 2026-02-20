@@ -39,15 +39,30 @@ services:
       - KB_NEO4J_URI=${KB_NEO4J_URI:-bolt://neo4j:7687}
       - KB_VECTOR_BACKEND=${KB_VECTOR_BACKEND:-qdrant}
       - KB_GRAPH_BACKEND=${KB_GRAPH_BACKEND:-neo4j}
+      - KB_METADATA_BACKEND=${KB_METADATA_BACKEND:-sqlite}
+      - KB_METADATA_DSN=${KB_METADATA_DSN:-sqlite:///./.kb_mcp/metadata.db}
       - KB_HTTP_HOST=${KB_HTTP_HOST:-0.0.0.0}
       - KB_HTTP_PORT=${KB_HTTP_PORT:-8080}
+      - KB_AUTH_MODE=${KB_AUTH_MODE:-dual}
+      - KB_TRANSPORT_SECURITY_ENABLED=${KB_TRANSPORT_SECURITY_ENABLED:-true}
+      - KB_TRANSPORT_ALLOWED_HOSTS=${KB_TRANSPORT_ALLOWED_HOSTS:-127.0.0.1:*,localhost:*,[::1]:*}
+      - KB_TRANSPORT_ALLOWED_ORIGINS=${KB_TRANSPORT_ALLOWED_ORIGINS:-http://127.0.0.1:*,http://localhost:*,http://[::1]:*}
       - KB_NEO4J_USER=${KB_NEO4J_USER:-neo4j}
       - KB_NEO4J_PASSWORD=${KB_NEO4J_PASSWORD:-neo4jpass}
       - KB_NEO4J_DATABASE=${KB_NEO4J_DATABASE:-neo4j}
       - KB_QDRANT_COLLECTION_CHUNKS=${KB_QDRANT_COLLECTION_CHUNKS:-kb_chunks}
       - KB_QDRANT_COLLECTION_MEMORY=${KB_QDRANT_COLLECTION_MEMORY:-kb_memory}
+      - KB_EMBEDDING_PROVIDER=${KB_EMBEDDING_PROVIDER:-local}
+      - KB_EMBEDDING_MODEL=${KB_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      - KB_EMBEDDING_BASE_URL=${KB_EMBEDDING_BASE_URL:-}
+      - KB_EMBEDDING_API_KEY=${KB_EMBEDDING_API_KEY:-}
+      - KB_EMBEDDING_DIMENSIONS=${KB_EMBEDDING_DIMENSIONS:-384}
     ports:
       - "8080:8080"
+    volumes:
+      - type: bind
+        source: ${KB_MCP_DATA_PATH:-./.docker-data/mcp}
+        target: /app/.kb_mcp
     depends_on:
       qdrant:
         condition: service_started

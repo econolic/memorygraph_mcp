@@ -74,6 +74,7 @@ class HybridRetriever:
             fused.append(
                 RetrievedItem(
                     uri=uri,
+                    text=str(hit.payload.get("text", "")),
                     score=total,
                     score_breakdown={
                         "vector": hit.score,

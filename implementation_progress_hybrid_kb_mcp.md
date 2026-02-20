@@ -327,3 +327,142 @@
   - Добавлен готовый JSON-шаблон конфигурации агента: `docs/tool_selection_policy.template.json`.
 - Риски/блокеры: нет
 - Следующий шаг: подключить `kb.tool_selection_policy` и JSON template в runtime-конфиг вашего LLM host/agent router.
+
+### Запись
+- Этап: WS1 — Security/Transport/Auth hardening
+- Статус: done
+- Дата/время: 2026-02-20T22:07:09Z
+- Изменённые файлы:
+  - `kb_mcp/config.py`
+  - `kb_mcp/security/auth.py`
+  - `kb_mcp/server/app.py`
+  - `kb_mcp/observability/audit.py`
+  - `kb_mcp/server/schemas.py`
+  - `.env.example`
+  - `docker-compose.yml`
+- Проверки (lint/type/unit/integration): см. итоговый bundle в WS7
+- Результат:
+  - Добавлен dual/strict auth resolver с precedence `Authorization -> payload_jwt -> legacy_acl`.
+  - `kb.search.decision_trace` расширен полями `auth_mode` и `identity_source`.
+  - Включён ACL enforcement для ресурсов `kb://doc|chunk|entity|memory`.
+  - Включены transport security defaults для Host/Origin validation.
+- Риски/блокеры:
+  - Для production с external host нужно явно настроить `KB_TRANSPORT_ALLOWED_HOSTS`/`KB_TRANSPORT_ALLOWED_ORIGINS`.
+- Следующий шаг: завершить persistence layer.
+
+### Запись
+- Этап: WS2 — Persistence layer (metadata + incremental state)
+- Статус: done
+- Дата/время: 2026-02-20T22:07:09Z
+- Изменённые файлы:
+  - `kb_mcp/storage/metadata_store.py`
+  - `kb_mcp/storage/sql_metadata_store.py`
+  - `kb_mcp/bootstrap.py`
+  - `pyproject.toml`
+- Проверки (lint/type/unit/integration): см. итоговый bundle в WS7
+- Результат:
+  - Добавлен SQL metadata backend (`sqlite` default + `postgres` через DSN).
+  - Персистентно хранятся documents/chunks/entities/memory/checksums.
+  - Добавлен bootstrap-init схемы таблиц при старте.
+- Риски/блокеры:
+  - Для Postgres нужен установленный DB driver в runtime образе.
+- Следующий шаг: закрыть retrieval quality core.
+
+### Запись
+- Этап: WS3 — Retrieval quality core (embeddings + rerank correctness)
+- Статус: done
+- Дата/время: 2026-02-20T22:07:09Z
+- Изменённые файлы:
+  - `kb_mcp/ingest/embeddings.py`
+  - `kb_mcp/storage/qdrant_store.py`
+  - `kb_mcp/retrieval/models.py`
+  - `kb_mcp/retrieval/rerank.py`
+  - `kb_mcp/retrieval/hybrid.py`
+- Проверки (lint/type/unit/integration): см. итоговый bundle в WS7
+- Результат:
+  - Введён pluggable embedder (`local` + `openai_compatible` + fallback).
+  - Убран hash-only путь из Qdrant adapter, enforced vector dimension.
+  - Rerank переведён на `(query, chunk_text)` и нормализованный score fusion.
+  - Delete memory/chunks в Qdrant выполняется с payload filters.
+- Риски/блокеры:
+  - При отсутствии `sentence-transformers` используется deterministic fallback embedder.
+- Следующий шаг: закрыть graph model completeness.
+
+### Запись
+- Этап: WS4 — Graph model completeness and correctness
+- Статус: done
+- Дата/время: 2026-02-20T22:07:09Z
+- Изменённые файлы:
+  - `kb_mcp/retrieval/graph_store.py`
+  - `kb_mcp/storage/neo4j_store.py`
+  - `kb_mcp/storage/in_memory_graph.py`
+  - `kb_mcp/ingest/entity_extract.py`
+  - `tests/test_graph_schema.py`
+- Проверки (lint/type/unit/integration): см. итоговый bundle в WS7
+- Результат:
+  - Реализованы узлы/рёбра `Document`, `Chunk`, `Entity`, `CONTAINS`, `MENTIONS`, `DOCUMENTED_IN`.
+  - `resolve_entities` переведён на `name|aliases|canonical_key`.
+  - Добавлены rule-based domain edges (`DEPENDS_ON|CALLS|OWNS|IMPLEMENTS|AFFECTS`).
+- Риски/блокеры:
+  - Domain relation extraction остаётся rule-based (без LLM extraction).
+- Следующий шаг: закрыть ingestion integration.
+
+### Запись
+- Этап: WS5 — Ingestion and connectors completion
+- Статус: done
+- Дата/время: 2026-02-20T22:07:09Z
+- Изменённые файлы:
+  - `kb_mcp/ingest/pipeline.py`
+  - `kb_mcp/ingest/connectors/filesystem.py`
+  - `kb_mcp/server/app.py`
+  - `kb_mcp/retrieval/vector_store.py`
+  - `kb_mcp/storage/in_memory_vector.py`
+- Проверки (lint/type/unit/integration): см. итоговый bundle в WS7
+- Результат:
+  - Интегрирован `GitConnector` (`kb.ingest.git_diff`).
+  - Checksum state вынесен из RAM в metadata backend.
+  - Добавлена очистка stale chunks (vector + graph + metadata).
+  - Добавлена нормализация `source`, `tags`, `updated_at`, `checksum`.
+- Риски/блокеры: нет
+- Следующий шаг: добавить KPI harness.
+
+### Запись
+- Этап: WS6 — Observability and KPI harness
+- Статус: done
+- Дата/время: 2026-02-20T22:07:09Z
+- Изменённые файлы:
+  - `bench/corpus/*.md`
+  - `bench/queries.jsonl`
+  - `bench/relevance.jsonl`
+  - `bench/run_benchmark.py`
+- Проверки (lint/type/unit/integration): см. итоговый bundle в WS7
+- Результат:
+  - Добавлен локальный benchmark harness с метриками Recall@10, nDCG@10, MRR, citation coverage, P95.
+  - Добавлены gate-проверки KPI с отдельными отчётами no-rerank/rerank.
+- Риски/блокеры:
+  - Для параллельных benchmark запусков нужен отдельный metadata DSN во избежание SQLite DDL race.
+- Следующий шаг: обновить docs и release notes.
+
+### Запись
+- Этап: WS7 — Docs, migration notes, release artifacts
+- Статус: done
+- Дата/время: 2026-02-20T22:07:09Z
+- Изменённые файлы:
+  - `README.md`
+  - `docs/runbook.md`
+  - `docs/kpi_report_template.md`
+  - `docs/tool_selection_policy.md`
+  - `docs/tool_selection_policy.template.json`
+  - `implementation_progress_hybrid_kb_mcp.md`
+- Проверки (lint/type/unit/integration):
+  - `python3 -m ruff check .` => OK
+  - `python3 -m mypy kb_mcp bench tests` => OK
+  - `python3 -m pytest -s` => 19 passed
+  - `python3 bench/run_benchmark.py --top-k 10 --enforce-gates` => PASS
+  - `python3 bench/run_benchmark.py --top-k 10 --rerank --enforce-gates` => PASS
+- Результат:
+  - Документация обновлена под новые auth/metadata/benchmark режимы.
+  - Зафиксированы KPI отчёты (`bench/report_no_rerank.json`, `bench/report_with_rerank.json`).
+- Риски/блокеры:
+  - В тестах auth используется короткий HMAC secret (warning), не влияет на функциональность.
+- Следующий шаг: подготовить commit/release tag.

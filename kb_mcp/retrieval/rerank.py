@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from kb_mcp.retrieval.models import RetrievedItem
@@ -24,31 +25,54 @@ class CrossEncoderReranker:
         except Exception:
             self._model = None
 
+    @staticmethod
+    def _sigmoid(value: float) -> float:
+        if value >= 0:
+            exp_neg = math.exp(-value)
+            return 1.0 / (1.0 + exp_neg)
+        exp_pos = math.exp(value)
+        return exp_pos / (1.0 + exp_pos)
+
     def rerank(self, *, query: str, items: list[RetrievedItem], top_n: int) -> list[RetrievedItem]:
         if not items:
             return []
 
         if self._model is None:
-            # Fallback lexical overlap scoring.
             q_tokens = set(query.lower().split())
             rescored: list[RetrievedItem] = []
             for item in items:
-                uri_tokens = set(item.uri.lower().replace("/", " ").replace("_", " ").split())
-                overlap = len(q_tokens & uri_tokens) / max(1, len(q_tokens))
-                score = min(1.0, item.score + 0.1 * overlap)
+                text_tokens = set(item.text.lower().split())
+                overlap = len(q_tokens & text_tokens) / max(1, len(q_tokens))
+                rerank_score = overlap
+                score = 0.7 * item.score + 0.3 * rerank_score
                 breakdown = dict(item.score_breakdown)
-                breakdown["rerank"] = score
-                rescored.append(RetrievedItem(uri=item.uri, score=score, score_breakdown=breakdown))
+                breakdown["rerank"] = rerank_score
+                rescored.append(
+                    RetrievedItem(
+                        uri=item.uri,
+                        text=item.text,
+                        score=score,
+                        score_breakdown=breakdown,
+                    )
+                )
             rescored.sort(key=lambda x: x.score, reverse=True)
             return rescored[:top_n]
 
-        pairs = [(query, item.uri) for item in items]
-        scores = self._model.predict(pairs)
+        pairs = [(query, item.text or item.uri) for item in items]
+        raw_scores = self._model.predict(pairs)
         rescored2: list[RetrievedItem] = []
-        for item, score in zip(items, scores, strict=True):
-            val = float(score)
+        for item, raw_score in zip(items, raw_scores, strict=True):
+            rerank_score = self._sigmoid(float(raw_score))
+            score = 0.7 * item.score + 0.3 * rerank_score
             breakdown = dict(item.score_breakdown)
-            breakdown["rerank"] = val
-            rescored2.append(RetrievedItem(uri=item.uri, score=val, score_breakdown=breakdown))
+            breakdown["rerank"] = rerank_score
+            rescored2.append(
+                RetrievedItem(
+                    uri=item.uri,
+                    text=item.text,
+                    score=score,
+                    score_breakdown=breakdown,
+                )
+            )
         rescored2.sort(key=lambda x: x.score, reverse=True)
         return rescored2[:top_n]

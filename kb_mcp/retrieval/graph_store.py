@@ -23,11 +23,30 @@ class GraphStore(Protocol):
     def explain_uri(self, *, uri: str, filters: dict[str, object]) -> list[str]:
         raise NotImplementedError
 
-    def upsert_mentions(self, *, chunk_uri: str, entity_uris: list[str], workspace_id: str) -> None:
+    def upsert_mentions(
+        self,
+        *,
+        doc_uri: str,
+        chunk_uri: str,
+        entity_uris: list[str],
+        entity_names: dict[str, str],
+        workspace_id: str,
+    ) -> None:
         raise NotImplementedError
 
     def upsert_memory_links(self, *, memory_uri: str, entity_uris: list[str], workspace_id: str) -> None:
         raise NotImplementedError
 
     def delete_memory_nodes(self, *, memory_uris: list[str], filters: dict[str, object]) -> int:
+        raise NotImplementedError
+
+    def delete_chunks(self, *, chunk_uris: list[str], filters: dict[str, object]) -> int:
+        raise NotImplementedError
+
+    def upsert_entity_relations(
+        self,
+        *,
+        relations: list[dict[str, str]],
+        workspace_id: str,
+    ) -> None:
         raise NotImplementedError

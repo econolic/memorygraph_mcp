@@ -3,7 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from kb_mcp.config import AppConfig
+from kb_mcp.ingest.embeddings import (
+    DeterministicFallbackEmbedder,
+    Embedder,
+    LocalSentenceTransformerEmbedder,
+    OpenAICompatibleEmbedder,
+)
 from kb_mcp.ingest.connectors.filesystem import FilesystemConnector
+from kb_mcp.ingest.connectors.git import GitConnector
 from kb_mcp.ingest.pipeline import IngestionPipeline
 from kb_mcp.memory.service import MemoryService
 from kb_mcp.memory.validator import MemoryFactValidator
@@ -19,9 +26,10 @@ from kb_mcp.security.auth import JwtAuthService
 from kb_mcp.security.redact import RedactionService
 from kb_mcp.storage.in_memory_graph import InMemoryGraphStore
 from kb_mcp.storage.in_memory_vector import InMemoryVectorStore
-from kb_mcp.storage.metadata_store import MetadataStore
+from kb_mcp.storage.metadata_store import MetadataRepository, MetadataStore
 from kb_mcp.storage.neo4j_store import Neo4jGraphStore
 from kb_mcp.storage.qdrant_store import QdrantVectorStore
+from kb_mcp.storage.sql_metadata_store import SQLMetadataStore
 
 
 @dataclass(frozen=True)
@@ -29,7 +37,7 @@ class AppDeps:
     config: AppConfig
     vector_store: VectorStore
     graph_store: GraphStore
-    metadata: MetadataStore
+    metadata: MetadataRepository
     retriever: HybridRetriever
     evidence: EvidenceBuilder
     acl: AclService
@@ -41,12 +49,28 @@ class AppDeps:
     audit: AuditLogger
 
 
-def _create_vector_store(cfg: AppConfig) -> VectorStore:
+def _create_embedder(cfg: AppConfig) -> Embedder:
+    fallback = DeterministicFallbackEmbedder(dimensions=cfg.embedding_dimensions)
+    if cfg.embedding_provider == "local":
+        return LocalSentenceTransformerEmbedder(model_name=cfg.embedding_model, fallback=fallback)
+    if cfg.embedding_provider == "openai_compatible":
+        return OpenAICompatibleEmbedder(
+            base_url=cfg.embedding_base_url,
+            api_key=cfg.embedding_api_key,
+            model=cfg.embedding_model,
+            dimensions=cfg.embedding_dimensions,
+            fallback=fallback,
+        )
+    return fallback
+
+
+def _create_vector_store(cfg: AppConfig, embedder: Embedder) -> VectorStore:
     if cfg.vector_backend == "qdrant":
         return QdrantVectorStore(
             url=cfg.qdrant_url,
             chunks_collection=cfg.qdrant_collection_chunks,
             memory_collection=cfg.qdrant_collection_memory,
+            embedder=embedder,
         )
     if cfg.vector_backend == "memory":
         return InMemoryVectorStore()
@@ -66,11 +90,20 @@ def _create_graph_store(cfg: AppConfig) -> GraphStore:
     raise ValueError(f"Unsupported graph backend: {cfg.graph_backend}")
 
 
+def _create_metadata_store(cfg: AppConfig) -> MetadataRepository:
+    if cfg.metadata_backend == "memory":
+        return MetadataStore()
+    if cfg.metadata_backend in {"sqlite", "postgres"}:
+        return SQLMetadataStore(dsn=cfg.metadata_dsn)
+    raise ValueError(f"Unsupported metadata backend: {cfg.metadata_backend}")
+
+
 def build_deps(cfg: AppConfig | None = None) -> AppDeps:
     cfg = cfg or AppConfig.from_env()
 
-    metadata = MetadataStore()
-    vector_store = _create_vector_store(cfg)
+    embedder = _create_embedder(cfg)
+    metadata = _create_metadata_store(cfg)
+    vector_store = _create_vector_store(cfg, embedder)
     graph_store = _create_graph_store(cfg)
 
     retriever = HybridRetriever(
@@ -96,6 +129,7 @@ def build_deps(cfg: AppConfig | None = None) -> AppDeps:
         graph_store=graph_store,
         metadata=metadata,
         filesystem=FilesystemConnector(),
+        git=GitConnector(),
     )
     metrics = MetricsRegistry()
     audit = AuditLogger()
