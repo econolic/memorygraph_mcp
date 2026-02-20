@@ -121,14 +121,25 @@ python -m kb_mcp.server.transport_stdio
 
 ### 6.2 Create JWT token for strict mode
 
+Generate a strong secret first (example):
+
 ```bash
-python - <<'PY'
-import jwt
-print(jwt.encode({"sub": "u1", "workspace_id": "w1", "roles": ["reader"]}, "change-me", algorithm="HS256"))
+python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(48))
 PY
 ```
 
-Replace `change-me` with your `KB_JWT_SECRET`.
+Set the generated value in `.env` as `KB_JWT_SECRET`, then create a token:
+
+```bash
+python3 - <<'PY'
+import jwt
+import os
+secret = os.environ["KB_JWT_SECRET"]
+print(jwt.encode({"sub": "u1", "workspace_id": "w1", "roles": ["reader"]}, secret, algorithm="HS256"))
+PY
+```
 
 ### 6.3 Smoke checks (HTTP MCP)
 

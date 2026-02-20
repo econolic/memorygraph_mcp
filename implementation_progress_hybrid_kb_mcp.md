@@ -487,3 +487,21 @@
   - В KPI template добавлена ссылка на benchmark/KPI section нового guide.
 - Риски/блокеры: нет
 - Следующий шаг: при необходимости прогнать финальный commit с docs-only изменениями.
+
+### Запись
+- Этап: Release finalization hardening
+- Статус: done
+- Дата/время: 2026-02-20T23:33:48Z
+- Изменённые файлы:
+  - `.env.example`
+  - `docs/install_deploy_config.md`
+  - `implementation_progress_hybrid_kb_mcp.md`
+- Проверки (lint/type/unit/integration):
+  - docs QA: secret generation and JWT setup commands verified
+  - git QA: working tree cleaned from transient artifacts
+- Результат:
+  - Убран слабый дефолт `KB_JWT_SECRET=change-me` из примерного конфига.
+  - Гайд обновлён безопасной процедурой генерации и использования strong JWT secret.
+  - Репозиторий подготовлен к релизному тегированию.
+- Риски/блокеры: нет
+- Следующий шаг: выполнить runtime secret rotation и переиндексацию KB.
