@@ -116,3 +116,13 @@ python3 bench/run_benchmark.py --top-k 10 --rerank --enforce-gates \
   --metadata-dsn sqlite:///./.kb_mcp/bench_metadata_with_rerank.db \
   --output bench/report_with_rerank.json
 ```
+
+## strict_oauth Smoke
+
+Run reproducible smoke (local test issuer + JWKS + signed token + `tools/list`):
+
+```bash
+./scripts/smoke_strict_oauth.sh
+```
+
+Manual guide and request example: `docs/install_deploy_config.md` (section: strict_oauth smoke with local test JWKS/issuer).

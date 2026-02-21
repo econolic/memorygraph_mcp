@@ -344,7 +344,62 @@ OIDC scope check:
 
 - if `KB_OAUTH_REQUIRED_SCOPES` is set, all listed scopes must be present in token `scope`/`scp`.
 
-### 9.3 Transport protections
+### 9.3 strict_oauth smoke with local test JWKS/issuer
+
+Run reproducible smoke with a local OIDC test issuer (real HTTP issuer + JWKS endpoint + signed bearer token):
+
+```bash
+./scripts/smoke_strict_oauth.sh
+```
+
+The script starts:
+
+1. local OIDC issuer at `http://127.0.0.1:9010` with:
+   - `/.well-known/openid-configuration`
+   - `/.well-known/jwks.json`
+2. MCP server in `KB_AUTH_MODE=strict_oauth`
+3. `tools/list` call with `Authorization: Bearer <token>`
+
+If you want manual control:
+
+```bash
+# Terminal 1: issuer
+python3 scripts/oidc_test_issuer.py serve --host 127.0.0.1 --port 9010
+```
+
+```bash
+# Terminal 2: mint token + run MCP + call tools/list
+TOKEN="$(python3 scripts/oidc_test_issuer.py mint \
+  --issuer http://127.0.0.1:9010 \
+  --audience hybrid-kb-mcp \
+  --subject u1 \
+  --workspace-id w1 \
+  --scope 'mcp.read mcp.write')"
+
+export KB_AUTH_MODE=strict_oauth
+export KB_OAUTH_ISSUER_URL=http://127.0.0.1:9010
+export KB_OAUTH_AUDIENCE=hybrid-kb-mcp
+export KB_OAUTH_JWKS_URL=http://127.0.0.1:9010/.well-known/jwks.json
+export KB_OAUTH_REQUIRED_SCOPES=mcp.read
+export KB_VECTOR_BACKEND=memory
+export KB_GRAPH_BACKEND=memory
+export KB_METADATA_BACKEND=memory
+export KB_AUTO_INGEST_ENABLED=false
+
+PYTHONPATH=. python3 -m kb_mcp.server.transport_http
+```
+
+Example request:
+
+```bash
+curl -sS http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -d '{"jsonrpc":"2.0","id":"oauth-smoke-1","method":"tools/list","params":{}}'
+```
+
+### 9.4 Transport protections
 
 Use:
 

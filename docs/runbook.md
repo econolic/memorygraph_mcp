@@ -48,6 +48,7 @@ Use this runbook for live incidents and recovery actions.
   3. If `KB_AUTH_MODE=strict`, verify `KB_JWT_SECRET` and algorithm match issuer.
   4. If `KB_AUTH_MODE=strict_oauth`, verify `KB_OAUTH_ISSUER_URL`, `KB_OAUTH_JWKS_URL`, `KB_OAUTH_AUDIENCE`, and required scopes.
   5. If needed during migration, switch to `KB_AUTH_MODE=dual` temporarily.
+  6. Re-run smoke from `./scripts/smoke_strict_oauth.sh` to isolate config issues.
 
 ### ACL denies expected reads
 
