@@ -22,16 +22,37 @@ class IngestionPipeline:
         metadata: MetadataRepository,
         filesystem: FilesystemConnector,
         git: GitConnector | None = None,
+        chunking_mode: str = "char",
     ) -> None:
         self._vector = vector_store
         self._graph = graph_store
         self._metadata = metadata
         self._filesystem = filesystem
         self._git = git or GitConnector()
+        self._chunking_mode = chunking_mode
 
     @staticmethod
     def _checksum(text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _legacy_doc_id(source_path: str) -> str:
+        return hashlib.sha1(source_path.encode("utf-8")).hexdigest()[:16]
+
+    @staticmethod
+    def _scoped_doc_id(*, workspace_id: str, source_path: str) -> str:
+        return hashlib.sha1(f"{workspace_id}:{source_path}".encode("utf-8")).hexdigest()[:16]
+
+    def _choose_doc_identity(self, *, workspace_id: str, source_path: str) -> tuple[str, str]:
+        legacy_doc_id = self._legacy_doc_id(source_path)
+        legacy_doc_uri = f"kb://doc/{legacy_doc_id}"
+        legacy_doc = self._metadata.get_doc(legacy_doc_uri)
+        if isinstance(legacy_doc, dict) and str(legacy_doc.get("workspace_id", "")) == workspace_id:
+            return legacy_doc_id, legacy_doc_uri
+
+        scoped_doc_id = self._scoped_doc_id(workspace_id=workspace_id, source_path=source_path)
+        scoped_doc_uri = f"kb://doc/{scoped_doc_id}"
+        return scoped_doc_id, scoped_doc_uri
 
     def ingest_git_diff(
         self,
@@ -63,24 +84,29 @@ class IngestionPipeline:
         updated = 0
 
         for doc in docs:
-            source_path = doc["source_path"]
-            text = doc["text"]
+            source_path = str(doc.get("source_path", ""))
+            text = str(doc.get("text", ""))
+            title = str(doc.get("title", ""))
+            source = str(doc.get("source", "filesystem"))
+            tags_raw = doc.get("tags", [])
+            tags = [str(v) for v in tags_raw] if isinstance(tags_raw, list) else []
+            if not source_path or not text:
+                continue
             checksum = self._checksum(text)
             prev = self._metadata.get_checksum(workspace_id=workspace_id, source_path=source_path)
             if prev == checksum:
                 continue
 
-            doc_id = hashlib.sha1(source_path.encode("utf-8")).hexdigest()[:16]
-            doc_uri = f"kb://doc/{doc_id}"
+            doc_id, doc_uri = self._choose_doc_identity(workspace_id=workspace_id, source_path=source_path)
             now_iso = datetime.now(tz=timezone.utc).isoformat()
             doc_payload = {
                 "uri": doc_uri,
-                "title": doc["title"],
-                "source": "filesystem",
+                "title": title,
+                "source": source,
                 "source_path": source_path,
                 "workspace_id": workspace_id,
                 "acl_allow": acl_allow,
-                "tags": [],
+                "tags": tags,
                 "updated_at": now_iso,
                 "checksum": checksum,
             }
@@ -90,7 +116,7 @@ class IngestionPipeline:
             old_chunk_uris = {str(item.get("uri", "")) for item in old_chunks}
 
             new_chunk_uris: set[str] = set()
-            for idx, chunk in enumerate(chunk_text(text)):
+            for idx, chunk in enumerate(chunk_text(text, mode=self._chunking_mode)):
                 chunk_id = f"{doc_id}_{idx}"
                 chunk_uri = f"kb://chunk/{chunk_id}"
                 new_chunk_uris.add(chunk_uri)
@@ -114,7 +140,9 @@ class IngestionPipeline:
                     "workspace_id": workspace_id,
                     "acl_allow": acl_allow,
                     "doc_uri": doc_uri,
+                    "source": source,
                     "source_path": source_path,
+                    "tags": tags,
                     "entity_uris": entity_uris,
                     "updated_at": now_iso,
                     "text": chunk_text_value,
@@ -130,7 +158,9 @@ class IngestionPipeline:
                         "entity_uris": entity_uris,
                         "workspace_id": workspace_id,
                         "acl_allow": acl_allow,
+                        "source": source,
                         "source_path": source_path,
+                        "tags": tags,
                         "updated_at": now_iso,
                     },
                 )
@@ -140,10 +170,12 @@ class IngestionPipeline:
                     entity_uris=entity_uris,
                     entity_names=entity_names,
                     workspace_id=workspace_id,
+                    acl_allow=acl_allow,
                 )
                 self._graph.upsert_entity_relations(
                     relations=extract_entity_relations(chunk_text_value, entity_uris),
                     workspace_id=workspace_id,
+                    acl_allow=acl_allow,
                 )
 
             stale_chunk_uris = sorted(uri for uri in old_chunk_uris if uri and uri not in new_chunk_uris)

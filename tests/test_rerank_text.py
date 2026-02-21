@@ -26,3 +26,9 @@ def test_rerank_fallback_uses_chunk_text_not_uri() -> None:
     ranked = reranker.rerank(query="lagerid mapping", items=items, top_n=2)
     assert ranked
     assert ranked[0].uri == "kb://chunk/b"
+
+
+def test_rerank_normalize_preserves_probability_scale() -> None:
+    reranker = CrossEncoderReranker()
+    assert reranker._normalize_score(0.25) == 0.25
+    assert 0.5 < reranker._normalize_score(1.0) <= 1.0

@@ -38,3 +38,4 @@ class RetrievalDebug:
     latency_ms: dict[str, int]
     fallback_mode: str | None = None
     fallback_reason: str | None = None
+    fusion_mode: str = "linear"

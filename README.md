@@ -10,6 +10,17 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
 - ACL-protected resources: `kb://doc/*`, `kb://chunk/*`, `kb://entity/*`, `kb://memory/*`
 - Hybrid retrieval (vector + graph + rerank) with fallback behavior
 - Metadata persistence (`sqlite` default, `postgres` optional)
+- Runtime feature flags for retrieval quality:
+  - `KB_FUSION_MODE=linear|rrf`
+  - `KB_CHUNKING_MODE=char|sentence`
+  - `KB_GRAPH_ENFORCE_OBJECT_ACL=true|false`
+- Default auto-ingest loop (enabled by default):
+  - `KB_AUTO_INGEST_ENABLED=true`
+  - `KB_AUTO_INGEST_ROOTS=/app/.kb_mcp/project_sync,./kb_mcp`
+  - `KB_AUTO_INGEST_WORKSPACE_ID=w1`
+  - `KB_AUTO_INGEST_ACL_SUBJECT=u1`
+  - `KB_AUTO_INGEST_INTERVAL_S=900`
+  - `KB_AUTO_INGEST_RUN_ON_START=true`
 
 ## Documentation Map
 
@@ -59,10 +70,15 @@ docker compose up -d --build
 - In `dual` mode precedence is:
   - `Authorization` header -> `payload.jwt_bearer` -> legacy payload ACL.
 - HTTP transport supports Host/Origin restrictions via `KB_TRANSPORT_ALLOWED_HOSTS` and `KB_TRANSPORT_ALLOWED_ORIGINS`.
+- Graph retrieval enforces object ACL by default (`KB_GRAPH_ENFORCE_OBJECT_ACL=true`).
 
 ## Benchmark Commands
 
 ```bash
-python3 bench/run_benchmark.py --top-k 10 --enforce-gates --output bench/report_no_rerank.json
-python3 bench/run_benchmark.py --top-k 10 --rerank --enforce-gates --output bench/report_with_rerank.json
+python3 bench/run_benchmark.py --top-k 10 --enforce-gates \
+  --metadata-dsn sqlite:///./.kb_mcp/bench_metadata_no_rerank.db \
+  --output bench/report_no_rerank.json
+python3 bench/run_benchmark.py --top-k 10 --rerank --enforce-gates \
+  --metadata-dsn sqlite:///./.kb_mcp/bench_metadata_with_rerank.db \
+  --output bench/report_with_rerank.json
 ```

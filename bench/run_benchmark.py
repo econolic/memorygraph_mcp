@@ -107,15 +107,32 @@ def main() -> int:
     mrrs: list[float] = []
     citation_cov: list[float] = []
     latencies_ms: list[float] = []
+    filtered_recalls: list[float] = []
+    filtered_ndcgs: list[float] = []
+    filtered_mrrs: list[float] = []
+    filtered_citation_cov: list[float] = []
+    filtered_latencies_ms: list[float] = []
 
     for row in queries:
         qid = str(row["qid"])
         query = str(row["query"])
+        query_filters = row.get("filters", {}) if isinstance(row.get("filters"), dict) else {}
+        applied_filters: dict[str, object] = {
+            "workspace_id": args.workspace_id,
+            "acl_subject": args.subject,
+            "acl_roles": [],
+            "graph_enforce_object_acl": True,
+        }
+        for key in ("tags", "sources", "updated_after"):
+            if key in query_filters:
+                applied_filters[key] = query_filters[key]
+        has_runtime_filters = any(key in applied_filters for key in ("tags", "sources", "updated_after"))
+
         t0 = time.perf_counter()
         items, _debug = deps.retriever.search(
             query=query,
             top_k=args.top_k,
-            filters={"workspace_id": args.workspace_id, "acl_subject": args.subject},
+            filters=applied_filters,
             depth=2,
             edge_types=[],
             max_nodes=200,
@@ -140,6 +157,12 @@ def main() -> int:
         ndcgs.append(_ndcg_at_k(rel, ranked_sources, args.top_k))
         mrrs.append(_mrr(rel, ranked_sources))
         citation_cov.append(float(cited) / max(1.0, float(len(items))))
+        if has_runtime_filters:
+            filtered_recalls.append(recalls[-1])
+            filtered_ndcgs.append(ndcgs[-1])
+            filtered_mrrs.append(mrrs[-1])
+            filtered_citation_cov.append(citation_cov[-1])
+            filtered_latencies_ms.append(latencies_ms[-1])
 
     p95 = statistics.quantiles(latencies_ms, n=100)[94] if len(latencies_ms) > 1 else (latencies_ms[0] if latencies_ms else 0.0)
     report = {
@@ -151,6 +174,18 @@ def main() -> int:
         "mrr": sum(mrrs) / max(1, len(mrrs)),
         "faithfulness_proxy_citation_coverage": sum(citation_cov) / max(1, len(citation_cov)),
         "p95_latency_ms": p95,
+        "filtered_query_count": len(filtered_recalls),
+        "filtered_recall_at_10": sum(filtered_recalls) / max(1, len(filtered_recalls)),
+        "filtered_ndcg_at_10": sum(filtered_ndcgs) / max(1, len(filtered_ndcgs)),
+        "filtered_mrr": sum(filtered_mrrs) / max(1, len(filtered_mrrs)),
+        "filtered_faithfulness_proxy_citation_coverage": (
+            sum(filtered_citation_cov) / max(1, len(filtered_citation_cov))
+        ),
+        "filtered_p95_latency_ms": (
+            statistics.quantiles(filtered_latencies_ms, n=100)[94]
+            if len(filtered_latencies_ms) > 1
+            else (filtered_latencies_ms[0] if filtered_latencies_ms else 0.0)
+        ),
     }
 
     if args.output:

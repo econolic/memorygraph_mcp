@@ -3,15 +3,15 @@
 ## Release
 
 - Version: 0.1.0
-- Date: 2026-02-20
+- Date: 2026-02-21
 - Evaluator: Codex (local runtime benchmark)
 
 ## Retrieval Metrics
 
 - Recall@10: 1.0000
-- nDCG@10: 0.9926
-- MRR: 0.9733
-- Dataset size (queries): 150
+- nDCG@10: 0.9929
+- MRR: 0.9744
+- Dataset size (queries): 156
 
 Source reports:
 - `bench/report_no_rerank.json`
@@ -19,8 +19,18 @@ Source reports:
 
 ## Latency (P95)
 
-- kb.search without rerank: 2.85 ms
-- kb.search with rerank: 4.14 ms
+- kb.search without rerank: 9.67 ms
+- kb.search with rerank: 10.39 ms
+
+## Filtered Subset Metrics
+
+- Filtered queries: 6
+- Filtered Recall@10: 1.0000
+- Filtered nDCG@10: 1.0000
+- Filtered MRR: 1.0000
+- Filtered Citation coverage: 1.0000
+- Filtered P95 latency without rerank: 4.99 ms
+- Filtered P95 latency with rerank: 5.93 ms
 
 ## Faithfulness
 
@@ -47,6 +57,10 @@ Source reports:
 ## Benchmark Commands
 
 ```bash
-python3 bench/run_benchmark.py --top-k 10 --enforce-gates --output bench/report_no_rerank.json
-python3 bench/run_benchmark.py --top-k 10 --rerank --enforce-gates --output bench/report_with_rerank.json
+python3 bench/run_benchmark.py --top-k 10 --enforce-gates \
+  --metadata-dsn sqlite:///./.kb_mcp/bench_metadata_no_rerank.db \
+  --output bench/report_no_rerank.json
+python3 bench/run_benchmark.py --top-k 10 --rerank --enforce-gates \
+  --metadata-dsn sqlite:///./.kb_mcp/bench_metadata_with_rerank.db \
+  --output bench/report_with_rerank.json
 ```

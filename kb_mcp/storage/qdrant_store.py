@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+from datetime import datetime, timezone
 from uuid import UUID, NAMESPACE_URL, uuid5
 
 from qdrant_client import QdrantClient
@@ -10,6 +12,15 @@ from kb_mcp.retrieval.models import VectorHit
 
 
 class QdrantVectorStore:
+    _INDEX_SCHEMA: dict[str, models.PayloadSchemaType] = {
+        "workspace_id": models.PayloadSchemaType.KEYWORD,
+        "acl_allow": models.PayloadSchemaType.KEYWORD,
+        "source": models.PayloadSchemaType.KEYWORD,
+        "source_path": models.PayloadSchemaType.KEYWORD,
+        "updated_at": models.PayloadSchemaType.DATETIME,
+        "tags": models.PayloadSchemaType.KEYWORD,
+    }
+
     def __init__(
         self,
         *,
@@ -18,12 +29,15 @@ class QdrantVectorStore:
         memory_collection: str,
         embedder: Embedder,
     ) -> None:
+        self._logger = logging.getLogger(__name__)
         self._client = QdrantClient(url=url)
         self._chunks = chunks_collection
         self._memory = memory_collection
         self._embedder = embedder
         self._ensure_collection(self._chunks)
         self._ensure_collection(self._memory)
+        self._ensure_payload_indexes(self._chunks)
+        self._ensure_payload_indexes(self._memory)
 
     def _ensure_collection(self, collection: str) -> None:
         try:
@@ -51,6 +65,56 @@ class QdrantVectorStore:
     def _point_id(self, raw_id: str) -> UUID:
         return uuid5(NAMESPACE_URL, f"hybrid-kb-mcp:{raw_id}")
 
+    @staticmethod
+    def _datetime_utc(value: object) -> datetime | None:
+        if isinstance(value, datetime):
+            dt = value
+        elif isinstance(value, str) and value.strip():
+            raw = value.strip()
+            if raw.endswith("Z"):
+                raw = f"{raw[:-1]}+00:00"
+            try:
+                dt = datetime.fromisoformat(raw)
+            except ValueError:
+                return None
+        else:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+
+    def _ensure_payload_indexes(self, collection: str) -> None:
+        for field_name, schema_type in self._INDEX_SCHEMA.items():
+            try:
+                self._client.create_payload_index(
+                    collection_name=collection,
+                    field_name=field_name,
+                    field_schema=schema_type,
+                    wait=True,
+                )
+                self._logger.info(
+                    "qdrant_payload_index_status",
+                    extra={
+                        "extra": {
+                            "collection": collection,
+                            "field": field_name,
+                            "status": "ok",
+                        }
+                    },
+                )
+            except Exception as exc:
+                self._logger.info(
+                    "qdrant_payload_index_status",
+                    extra={
+                        "extra": {
+                            "collection": collection,
+                            "field": field_name,
+                            "status": "skip_or_exists",
+                            "error": str(exc),
+                        }
+                    },
+                )
+
     def _build_filter(
         self,
         filters: dict[str, object],
@@ -61,13 +125,40 @@ class QdrantVectorStore:
         conditions: list[models.Condition] = []
         workspace_id = filters.get("workspace_id")
         acl_subject = filters.get("acl_subject")
+        acl_roles = filters.get("acl_roles", [])
+        tags = filters.get("tags", [])
+        sources = filters.get("sources", [])
+        updated_after = filters.get("updated_after")
         if workspace_id:
             conditions.append(
                 models.FieldCondition(key="workspace_id", match=models.MatchValue(value=str(workspace_id)))
             )
         if acl_subject:
+            acl_candidates = [str(acl_subject)]
+            if isinstance(acl_roles, list):
+                acl_candidates.extend(
+                    f"role:{str(role).strip()}"
+                    for role in acl_roles
+                    if str(role).strip()
+                )
             conditions.append(
-                models.FieldCondition(key="acl_allow", match=models.MatchAny(any=[str(acl_subject)]))
+                models.FieldCondition(key="acl_allow", match=models.MatchAny(any=acl_candidates))
+            )
+        if isinstance(tags, list):
+            tag_values = [str(tag).strip() for tag in tags if str(tag).strip()]
+            if tag_values:
+                conditions.append(models.FieldCondition(key="tags", match=models.MatchAny(any=tag_values)))
+        if isinstance(sources, list):
+            source_values = [str(source).strip() for source in sources if str(source).strip()]
+            if source_values:
+                conditions.append(models.FieldCondition(key="source", match=models.MatchAny(any=source_values)))
+        updated_after_dt = self._datetime_utc(updated_after)
+        if updated_after_dt is not None:
+            conditions.append(
+                models.FieldCondition(
+                    key="updated_at",
+                    range=models.DatetimeRange(gte=updated_after_dt),
+                )
             )
         if id_key and ids:
             conditions.append(

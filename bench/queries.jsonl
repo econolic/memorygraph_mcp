@@ -148,3 +148,9 @@
 {"qid": "q148", "query": "Find evidence for Legacy payload ACL deprecated in dual mode."}
 {"qid": "q149", "query": "Explain Legacy payload ACL deprecated in dual mode."}
 {"qid": "q150", "query": "Source for Legacy payload ACL deprecated in dual mode?"}
+{"qid": "q151", "query": "Find evidence for API Z contract.", "filters": {"sources": ["doc_api_contract.md"], "tags": ["ext:md"], "updated_after": "2000-01-01T00:00:00Z"}}
+{"qid": "q152", "query": "Find evidence for graph edges CONTAINS MENTIONS DOCUMENTED_IN.", "filters": {"sources": ["doc_graph.md"], "tags": ["ext:md"], "updated_after": "2000-01-01T00:00:00Z"}}
+{"qid": "q153", "query": "Find evidence for auth strict bearer requirement.", "filters": {"sources": ["doc_auth_modes.md"], "tags": ["ext:md"], "updated_after": "2000-01-01T00:00:00Z"}}
+{"qid": "q154", "query": "Find evidence for Qdrant payload filtering and query points.", "filters": {"sources": ["doc_qdrant.md"], "tags": ["ext:md"], "updated_after": "2000-01-01T00:00:00Z"}}
+{"qid": "q155", "query": "Find evidence for memory upsert/search/delete flows.", "filters": {"sources": ["doc_memory.md"], "tags": ["ext:md"], "updated_after": "2000-01-01T00:00:00Z"}}
+{"qid": "q156", "query": "Find evidence for incident runbook diagnostics.", "filters": {"sources": ["doc_incident.md"], "tags": ["ext:md"], "updated_after": "2000-01-01T00:00:00Z"}}

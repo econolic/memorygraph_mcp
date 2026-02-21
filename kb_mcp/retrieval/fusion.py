@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 
 
@@ -22,3 +23,15 @@ def fuse_scores(
         + weights.w_graph * graph_score
         + weights.w_memory * memory_score
     )
+
+
+def rrf_fuse(
+    *,
+    ranked_uris_by_signal: dict[str, list[str]],
+    k: int = 60,
+) -> dict[str, float]:
+    scores: dict[str, float] = defaultdict(float)
+    for uris in ranked_uris_by_signal.values():
+        for rank, uri in enumerate(uris, start=1):
+            scores[uri] += 1.0 / float(k + rank)
+    return dict(scores)

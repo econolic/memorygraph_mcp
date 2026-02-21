@@ -27,6 +27,7 @@ Use this runbook for live incidents and recovery actions.
   1. Validate `KB_NEO4J_URI`, `KB_NEO4J_USER`, `KB_NEO4J_PASSWORD`, `KB_NEO4J_DATABASE`.
   2. Check Neo4j container/service health.
   3. Re-run search and confirm fallback is cleared.
+  4. Confirm `kb.search.debug.graph_acl_enforced=true` unless explicitly disabled.
 
 ### Strict mode auth rejects calls
 
@@ -44,6 +45,7 @@ Use this runbook for live incidents and recovery actions.
   1. Verify JWT identity (`sub`, `roles`, `workspace_id`).
   2. Verify `acl_allow` metadata on doc/chunk/entity/memory.
   3. Confirm no payload spoof mismatch (`decision_trace.identity_source`).
+  4. Inspect `kb.search.debug.filters_effective` and verify `tags/sources/updated_after`.
 
 ### Postgres metadata permission failures
 
@@ -68,6 +70,7 @@ Use this runbook for live incidents and recovery actions.
   1. Run benchmark without gates and inspect raw metrics.
   2. Compare no-rerank vs rerank reports.
   3. Verify ingestion freshness and stale chunk cleanup.
+  4. Compare filtered subset metrics (`filtered_recall_at_10`, `filtered_ndcg_at_10`).
 
 ## Persistence Recovery
 

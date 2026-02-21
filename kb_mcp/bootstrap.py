@@ -110,6 +110,7 @@ def build_deps(cfg: AppConfig | None = None) -> AppDeps:
         vector_store=vector_store,
         graph_store=graph_store,
         reranker=CrossEncoderReranker(),
+        fusion_mode=cfg.fusion_mode,
     )
     evidence = EvidenceBuilder(metadata)
 
@@ -130,6 +131,7 @@ def build_deps(cfg: AppConfig | None = None) -> AppDeps:
         metadata=metadata,
         filesystem=FilesystemConnector(),
         git=GitConnector(),
+        chunking_mode=cfg.chunking_mode,
     )
     metrics = MetricsRegistry()
     audit = AuditLogger()

@@ -24,14 +24,14 @@ def test_ingestion_creates_document_chunk_entity_edges(tmp_path: Path) -> None:
     result = pipeline.ingest_filesystem(root=str(tmp_path), workspace_id="w1", acl_allow=["u1"])
     assert result["created"] == 1
 
-    seed = graph.resolve_entities(query="ServiceA", filters={"workspace_id": "w1"})
+    seed = graph.resolve_entities(query="ServiceA", filters={"workspace_id": "w1", "acl_subject": "u1"})
     assert seed
     _nodes, edges = graph.expand(
         seed_uris=seed,
         depth=2,
         edge_types=[],
         max_nodes=200,
-        filters={"workspace_id": "w1"},
+        filters={"workspace_id": "w1", "acl_subject": "u1"},
     )
     rels = {edge.rel for edge in edges}
     assert "MENTIONS" in rels

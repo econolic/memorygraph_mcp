@@ -1,10 +1,16 @@
 {
-  "queries": 150,
+  "queries": 156,
   "top_k": 10,
   "rerank_enabled": true,
   "recall_at_10": 1.0,
-  "ndcg_at_10": 0.9926185950714292,
-  "mrr": 0.9733333333333334,
+  "ndcg_at_10": 0.9929024952609896,
+  "mrr": 0.9743589743589743,
   "faithfulness_proxy_citation_coverage": 1.0,
-  "p95_latency_ms": 4.1359577001003345
+  "p95_latency_ms": 10.394591500062234,
+  "filtered_query_count": 6,
+  "filtered_recall_at_10": 1.0,
+  "filtered_ndcg_at_10": 1.0,
+  "filtered_mrr": 1.0,
+  "filtered_faithfulness_proxy_citation_coverage": 1.0,
+  "filtered_p95_latency_ms": 5.934998500129041
 }

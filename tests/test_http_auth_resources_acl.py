@@ -136,6 +136,10 @@ def test_http_bearer_identity_precedence_over_payload_spoof() -> None:
         assert decision_trace.get("identity_source") == "authorization_header"
         assert decision_trace.get("auth_mode") == "strict"
         assert debug.get("payload_workspace_ignored") is True
+        assert isinstance(debug.get("filters_effective"), dict)
+        assert debug.get("graph_acl_enforced") is True
+        assert decision_trace.get("fusion_mode") == "linear"
+        assert debug.get("fusion_mode") == "linear"
 
 
 def test_http_resource_acl_denies_foreign_workspace_access(tmp_path: Path) -> None:

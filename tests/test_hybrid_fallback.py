@@ -32,6 +32,7 @@ class FailingGraphStore:
         entity_uris: list[str],
         entity_names: dict[str, str],
         workspace_id: str,
+        acl_allow: list[str],
     ) -> None:
         return None
 
@@ -44,7 +45,13 @@ class FailingGraphStore:
     def delete_chunks(self, *, chunk_uris: list[str], filters: dict[str, object]) -> int:
         return 0
 
-    def upsert_entity_relations(self, *, relations: list[dict[str, str]], workspace_id: str) -> None:
+    def upsert_entity_relations(
+        self,
+        *,
+        relations: list[dict[str, str]],
+        workspace_id: str,
+        acl_allow: list[str],
+    ) -> None:
         return None
 
 

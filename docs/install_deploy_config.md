@@ -76,12 +76,23 @@ Key variables:
 - Embeddings:
   - `KB_EMBEDDING_PROVIDER=local|openai_compatible`
   - `KB_EMBEDDING_MODEL`, `KB_EMBEDDING_BASE_URL`, `KB_EMBEDDING_API_KEY`, `KB_EMBEDDING_DIMENSIONS`
+- Retrieval quality/runtime flags:
+  - `KB_FUSION_MODE=linear|rrf`
+  - `KB_CHUNKING_MODE=char|sentence`
+  - `KB_GRAPH_ENFORCE_OBJECT_ACL=true|false`
+  - `KB_AUTO_INGEST_ENABLED=true|false`
+  - `KB_AUTO_INGEST_ROOTS=<comma-separated directories>`
+  - `KB_AUTO_INGEST_WORKSPACE_ID=<workspace>`
+  - `KB_AUTO_INGEST_ACL_SUBJECT=<subject>`
+  - `KB_AUTO_INGEST_INTERVAL_S=<seconds>`
+  - `KB_AUTO_INGEST_RUN_ON_START=true|false`
 
 Security recommendation for HTTP runtime:
 
 - use `KB_AUTH_MODE=strict`;
 - set strong `KB_JWT_SECRET`;
 - keep Host/Origin allowlists constrained to trusted local endpoints.
+- keep `KB_GRAPH_ENFORCE_OBJECT_ACL=true` for production.
 
 ## 6. Install Path A: Source (venv, no Docker)
 
@@ -349,8 +360,12 @@ curl -sS http://127.0.0.1:8080/mcp \
 Run:
 
 ```bash
-python3 bench/run_benchmark.py --top-k 10 --enforce-gates --output bench/report_no_rerank.json
-python3 bench/run_benchmark.py --top-k 10 --rerank --enforce-gates --output bench/report_with_rerank.json
+python3 bench/run_benchmark.py --top-k 10 --enforce-gates \
+  --metadata-dsn sqlite:///./.kb_mcp/bench_metadata_no_rerank.db \
+  --output bench/report_no_rerank.json
+python3 bench/run_benchmark.py --top-k 10 --rerank --enforce-gates \
+  --metadata-dsn sqlite:///./.kb_mcp/bench_metadata_with_rerank.db \
+  --output bench/report_with_rerank.json
 ```
 
 Gates enforced by script:

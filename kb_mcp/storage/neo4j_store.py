@@ -6,6 +6,28 @@ from kb_mcp.retrieval.models import GraphEdge, GraphNode
 
 
 class Neo4jGraphStore:
+    _ALLOWED_REL_TYPES = {
+        "CONTAINS",
+        "MENTIONS",
+        "DOCUMENTED_IN",
+        "DEPENDS_ON",
+        "CALLS",
+        "OWNS",
+        "IMPLEMENTS",
+        "AFFECTS",
+        "MEMORY_REFERS_TO",
+    }
+    _DEFAULT_REL_TYPES = (
+        "CONTAINS",
+        "MENTIONS",
+        "DOCUMENTED_IN",
+        "DEPENDS_ON",
+        "CALLS",
+        "OWNS",
+        "IMPLEMENTS",
+        "AFFECTS",
+    )
+
     def __init__(self, *, uri: str, user: str, password: str, database: str) -> None:
         self._driver = GraphDatabase.driver(uri, auth=(user, password))
         self._database = database
@@ -13,15 +35,48 @@ class Neo4jGraphStore:
     def close(self) -> None:
         self._driver.close()
 
+    @staticmethod
+    def _acl_subjects(filters: dict[str, object]) -> list[str]:
+        subjects: list[str] = []
+        acl_subject = str(filters.get("acl_subject", "")).strip()
+        if acl_subject:
+            subjects.append(acl_subject)
+        roles_raw = filters.get("acl_roles", [])
+        if isinstance(roles_raw, list):
+            for role in roles_raw:
+                role_value = str(role).strip()
+                if role_value:
+                    subjects.append(f"role:{role_value}")
+        return subjects
+
+    @staticmethod
+    def _acl_enforced(filters: dict[str, object]) -> bool:
+        return bool(filters.get("graph_enforce_object_acl", True))
+
+    def _relation_pattern(self, edge_types: list[str]) -> str:
+        selected = [edge_type for edge_type in edge_types if edge_type in self._ALLOWED_REL_TYPES]
+        if not selected:
+            selected = list(self._DEFAULT_REL_TYPES)
+        return "|".join(f"`{edge_type}`" for edge_type in selected)
+
     def resolve_entities(self, *, query: str, filters: dict[str, object]) -> list[str]:
         workspace_id = str(filters.get("workspace_id", ""))
+        acl_subjects = self._acl_subjects(filters)
+        enforce_acl = self._acl_enforced(filters)
         records, _, _ = self._driver.execute_query(
             "MATCH (e:Entity {workspace_id: $workspace_id}) "
-            "WHERE toLower(coalesce(e.name, '')) CONTAINS toLower($q) "
+            "WHERE ($enforce_acl = false "
+            "OR any(sub IN coalesce(e.acl_allow, []) WHERE sub IN $acl_subjects)) "
+            "AND (toLower(coalesce(e.name, '')) CONTAINS toLower($q) "
             "OR toLower(coalesce(e.canonical_key, '')) CONTAINS toLower($q) "
-            "OR any(alias IN coalesce(e.aliases, []) WHERE toLower(alias) CONTAINS toLower($q)) "
+            "OR any(alias IN coalesce(e.aliases, []) WHERE toLower(alias) CONTAINS toLower($q))) "
             "RETURN e.uri AS uri LIMIT 20",
-            parameters_={"workspace_id": workspace_id, "q": query},
+            parameters_={
+                "workspace_id": workspace_id,
+                "q": query,
+                "acl_subjects": acl_subjects,
+                "enforce_acl": enforce_acl,
+            },
             database_=self._database,
             routing_=RoutingControl.READ,
         )
@@ -38,23 +93,27 @@ class Neo4jGraphStore:
     ) -> tuple[list[GraphNode], list[GraphEdge]]:
         workspace_id = str(filters.get("workspace_id", ""))
         bounded_depth = max(1, min(depth, 4))
+        acl_subjects = self._acl_subjects(filters)
+        enforce_acl = self._acl_enforced(filters)
+        rel_pattern = self._relation_pattern(edge_types)
 
         node_query = (
-            f"MATCH p=(a)-[*1..{bounded_depth}]-(b) "
+            f"MATCH p=(a)-[:{rel_pattern}*1..{bounded_depth}]-(b) "
             "WHERE a.uri IN $seed_uris "
-            "AND a.workspace_id = $workspace_id "
-            "AND b.workspace_id = $workspace_id "
+            "AND all(n IN nodes(p) WHERE n.workspace_id = $workspace_id) "
+            "AND ($enforce_acl = false "
+            "OR all(n IN nodes(p) WHERE any(sub IN coalesce(n.acl_allow, []) WHERE sub IN $acl_subjects))) "
             "UNWIND nodes(p) AS n "
             "RETURN DISTINCT n.uri AS uri, labels(n) AS labels, coalesce(n.name, n.uri) AS name, properties(n) AS props "
             "LIMIT $max_nodes"
         )
         edge_query = (
-            f"MATCH p=(a)-[*1..{bounded_depth}]-(b) "
+            f"MATCH p=(a)-[:{rel_pattern}*1..{bounded_depth}]-(b) "
             "WHERE a.uri IN $seed_uris "
-            "AND a.workspace_id = $workspace_id "
-            "AND b.workspace_id = $workspace_id "
+            "AND all(n IN nodes(p) WHERE n.workspace_id = $workspace_id) "
+            "AND ($enforce_acl = false "
+            "OR all(n IN nodes(p) WHERE any(sub IN coalesce(n.acl_allow, []) WHERE sub IN $acl_subjects))) "
             "UNWIND relationships(p) AS rel "
-            "WITH rel WHERE size($edge_types) = 0 OR type(rel) IN $edge_types "
             "RETURN DISTINCT startNode(rel).uri AS src, type(rel) AS rel_type, endNode(rel).uri AS dst "
             "LIMIT $max_nodes"
         )
@@ -65,6 +124,8 @@ class Neo4jGraphStore:
                 "seed_uris": seed_uris,
                 "workspace_id": workspace_id,
                 "max_nodes": max_nodes,
+                "acl_subjects": acl_subjects,
+                "enforce_acl": enforce_acl,
             },
             database_=self._database,
             routing_=RoutingControl.READ,
@@ -75,7 +136,8 @@ class Neo4jGraphStore:
                 "seed_uris": seed_uris,
                 "workspace_id": workspace_id,
                 "max_nodes": max_nodes,
-                "edge_types": edge_types,
+                "acl_subjects": acl_subjects,
+                "enforce_acl": enforce_acl,
             },
             database_=self._database,
             routing_=RoutingControl.READ,
@@ -109,10 +171,22 @@ class Neo4jGraphStore:
 
     def explain_uri(self, *, uri: str, filters: dict[str, object]) -> list[str]:
         workspace_id = str(filters.get("workspace_id", ""))
+        acl_subjects = self._acl_subjects(filters)
+        enforce_acl = self._acl_enforced(filters)
         records, _, _ = self._driver.execute_query(
             "MATCH (n {uri: $uri, workspace_id: $workspace_id})-[r]-(m) "
+            "WHERE m.workspace_id = $workspace_id "
+            "AND ($enforce_acl = false "
+            "OR any(sub IN coalesce(n.acl_allow, []) WHERE sub IN $acl_subjects)) "
+            "AND ($enforce_acl = false "
+            "OR any(sub IN coalesce(m.acl_allow, []) WHERE sub IN $acl_subjects)) "
             "RETURN type(r) AS rel, m.uri AS uri LIMIT 20",
-            parameters_={"uri": uri, "workspace_id": workspace_id},
+            parameters_={
+                "uri": uri,
+                "workspace_id": workspace_id,
+                "acl_subjects": acl_subjects,
+                "enforce_acl": enforce_acl,
+            },
             database_=self._database,
             routing_=RoutingControl.READ,
         )
@@ -126,6 +200,7 @@ class Neo4jGraphStore:
         entity_uris: list[str],
         entity_names: dict[str, str],
         workspace_id: str,
+        acl_allow: list[str],
     ) -> None:
         entities = []
         for entity_uri in entity_uris:
@@ -142,13 +217,16 @@ class Neo4jGraphStore:
 
         self._driver.execute_query(
             "MERGE (d:Document {uri: $doc_uri, workspace_id: $workspace_id}) "
+            "SET d.acl_allow = [x IN (coalesce(d.acl_allow, []) + $acl_allow) WHERE x IS NOT NULL] "
             "MERGE (c:Chunk {uri: $chunk_uri, workspace_id: $workspace_id}) "
             "ON CREATE SET c.name = $chunk_name "
+            "SET c.acl_allow = [x IN (coalesce(c.acl_allow, []) + $acl_allow) WHERE x IS NOT NULL] "
             "MERGE (d)-[:CONTAINS]->(c) "
             "WITH d, c "
             "UNWIND $entities AS ent "
             "MERGE (e:Entity {uri: ent.uri, workspace_id: $workspace_id}) "
-            "SET e.name = ent.name, e.canonical_key = ent.canonical_key, e.aliases = ent.aliases "
+            "SET e.name = ent.name, e.canonical_key = ent.canonical_key, e.aliases = ent.aliases, "
+            "e.acl_allow = [x IN (coalesce(e.acl_allow, []) + $acl_allow) WHERE x IS NOT NULL] "
             "MERGE (c)-[:MENTIONS]->(e) "
             "MERGE (e)-[:DOCUMENTED_IN]->(d)",
             parameters_={
@@ -157,6 +235,7 @@ class Neo4jGraphStore:
                 "workspace_id": workspace_id,
                 "entities": entities,
                 "chunk_name": chunk_uri.split("/")[-1],
+                "acl_allow": list(acl_allow),
             },
             database_=self._database,
         )
@@ -193,7 +272,13 @@ class Neo4jGraphStore:
         )[1]
         return int(summary.counters.nodes_deleted)
 
-    def upsert_entity_relations(self, *, relations: list[dict[str, str]], workspace_id: str) -> None:
+    def upsert_entity_relations(
+        self,
+        *,
+        relations: list[dict[str, str]],
+        workspace_id: str,
+        acl_allow: list[str],
+    ) -> None:
         allowed = {"DEPENDS_ON", "CALLS", "OWNS", "IMPLEMENTS", "AFFECTS"}
         for relation in relations:
             src = relation.get("src", "")
@@ -203,8 +288,15 @@ class Neo4jGraphStore:
                 continue
             self._driver.execute_query(
                 f"MERGE (a:Entity {{uri: $src, workspace_id: $workspace_id}}) "
+                f"SET a.acl_allow = [x IN (coalesce(a.acl_allow, []) + $acl_allow) WHERE x IS NOT NULL] "
                 f"MERGE (b:Entity {{uri: $dst, workspace_id: $workspace_id}}) "
+                f"SET b.acl_allow = [x IN (coalesce(b.acl_allow, []) + $acl_allow) WHERE x IS NOT NULL] "
                 f"MERGE (a)-[:{rel_type}]->(b)",
-                parameters_={"src": src, "dst": dst, "workspace_id": workspace_id},
+                parameters_={
+                    "src": src,
+                    "dst": dst,
+                    "workspace_id": workspace_id,
+                    "acl_allow": list(acl_allow),
+                },
                 database_=self._database,
             )

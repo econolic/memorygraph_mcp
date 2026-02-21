@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
@@ -77,6 +78,24 @@ def _resource_allowed(*, deps: AppDeps, auth_ctx: AccessContext, data: dict[str,
     return deps.acl.can_read(ctx=auth_ctx, acl_allow=acl_allow)
 
 
+def _normalize_datetime_utc(value: object) -> str | None:
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str) and value.strip():
+        raw = value.strip()
+        if raw.endswith("Z"):
+            raw = f"{raw[:-1]}+00:00"
+        try:
+            dt = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+    else:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
+
+
 def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
     deps = deps or build_deps()
     cfg = deps.config
@@ -147,6 +166,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         acl_filters = deps.acl.apply_filters(ctx=auth.ctx, filters=payload.filters.model_dump())
         search_workspace = auth.ctx.workspace_id
         acl_filters["workspace_id"] = search_workspace
+        acl_filters["graph_enforce_object_acl"] = cfg.graph_enforce_object_acl
 
         memory_hits = deps.memory.search(
             query=payload.query,
@@ -198,6 +218,13 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
                 )
             )
 
+        acl_roles_raw = acl_filters.get("acl_roles", [])
+        acl_roles = [str(role) for role in acl_roles_raw] if isinstance(acl_roles_raw, list) else []
+        tags_raw = acl_filters.get("tags", [])
+        tags = [str(tag) for tag in tags_raw] if isinstance(tags_raw, list) else []
+        sources_raw = acl_filters.get("sources", [])
+        sources = [str(source) for source in sources_raw] if isinstance(sources_raw, list) else []
+
         output = KbSearchOutput(
             query_id=request_id,
             results=results,
@@ -215,12 +242,23 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
                 "auth_mode": auth.auth_mode,
                 "identity_source": auth.identity_source,
                 "rerank_provider": payload.rerank.provider,
+                "fusion_mode": debug.fusion_mode,
             },
             debug={
                 "latency_ms": debug.latency_ms,
                 "fallback_mode": debug.fallback_mode,
                 "fallback_reason": debug.fallback_reason,
                 "filters_applied": True,
+                "filters_effective": {
+                    "workspace_id": str(acl_filters.get("workspace_id", "")),
+                    "acl_subject": str(acl_filters.get("acl_subject", "")),
+                    "acl_roles": acl_roles,
+                    "tags": tags,
+                    "sources": sources,
+                    "updated_after": _normalize_datetime_utc(acl_filters.get("updated_after")),
+                },
+                "graph_acl_enforced": cfg.graph_enforce_object_acl,
+                "fusion_mode": debug.fusion_mode,
                 "deprecated_legacy_acl": auth.deprecated_legacy_acl,
                 "payload_workspace_ignored": payload.workspace_id != auth.ctx.workspace_id,
             },
@@ -242,7 +280,12 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
     def kb_graph_expand(payload: KbGraphExpandInput, ctx: FastContext | None = None) -> KbGraphExpandOutput:
         t0 = perf_counter()
         auth = resolve_identity(_legacy_acl(workspace_id=payload.workspace_id, subject=payload.subject), ctx)
-        filters: dict[str, object] = {"workspace_id": auth.ctx.workspace_id, "acl_subject": auth.ctx.subject}
+        filters: dict[str, object] = {
+            "workspace_id": auth.ctx.workspace_id,
+            "acl_subject": auth.ctx.subject,
+            "acl_roles": list(auth.ctx.roles),
+            "graph_enforce_object_acl": cfg.graph_enforce_object_acl,
+        }
         nodes, edges = deps.graph_store.expand(
             seed_uris=payload.seed_entities,
             depth=payload.depth,
@@ -272,7 +315,12 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
     def kb_explain(payload: KbExplainInput, ctx: FastContext | None = None) -> KbExplainOutput:
         t0 = perf_counter()
         auth = resolve_identity(_legacy_acl(workspace_id=payload.workspace_id, subject=payload.subject), ctx)
-        filters: dict[str, object] = {"workspace_id": auth.ctx.workspace_id, "acl_subject": auth.ctx.subject}
+        filters: dict[str, object] = {
+            "workspace_id": auth.ctx.workspace_id,
+            "acl_subject": auth.ctx.subject,
+            "acl_roles": list(auth.ctx.roles),
+            "graph_enforce_object_acl": cfg.graph_enforce_object_acl,
+        }
         explanations: list[dict[str, Any]] = []
         for uri in payload.uris:
             graph_reasons = deps.graph_store.explain_uri(uri=uri, filters=filters)

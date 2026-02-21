@@ -33,6 +33,11 @@ class CrossEncoderReranker:
         exp_pos = math.exp(value)
         return exp_pos / (1.0 + exp_pos)
 
+    def _normalize_score(self, raw_score: float) -> float:
+        if 0.0 <= raw_score <= 1.0:
+            return raw_score
+        return self._sigmoid(raw_score)
+
     def rerank(self, *, query: str, items: list[RetrievedItem], top_n: int) -> list[RetrievedItem]:
         if not items:
             return []
@@ -62,7 +67,7 @@ class CrossEncoderReranker:
         raw_scores = self._model.predict(pairs)
         rescored2: list[RetrievedItem] = []
         for item, raw_score in zip(items, raw_scores, strict=True):
-            rerank_score = self._sigmoid(float(raw_score))
+            rerank_score = self._normalize_score(float(raw_score))
             score = 0.7 * item.score + 0.3 * rerank_score
             breakdown = dict(item.score_breakdown)
             breakdown["rerank"] = rerank_score

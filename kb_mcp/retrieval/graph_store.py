@@ -31,6 +31,7 @@ class GraphStore(Protocol):
         entity_uris: list[str],
         entity_names: dict[str, str],
         workspace_id: str,
+        acl_allow: list[str],
     ) -> None:
         raise NotImplementedError
 
@@ -48,5 +49,6 @@ class GraphStore(Protocol):
         *,
         relations: list[dict[str, str]],
         workspace_id: str,
+        acl_allow: list[str],
     ) -> None:
         raise NotImplementedError
