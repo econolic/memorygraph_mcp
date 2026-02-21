@@ -21,7 +21,7 @@ Core components:
 - MCP server (`kb_mcp`) exposing tools/resources via stdio and Streamable HTTP.
 - Vector backend: Qdrant (`kb_chunks`, `kb_memory` collections).
 - Graph backend: Neo4j (entities, chunks, document relations).
-- Metadata backend: SQLite (default) or Postgres (optional).
+- Metadata backend: SQLite (default), Postgres (optional), or in-memory mode for tests/dev.
 
 Primary data flows:
 
@@ -68,7 +68,7 @@ Key variables:
 - Backends:
   - `KB_VECTOR_BACKEND=qdrant|memory`
   - `KB_GRAPH_BACKEND=neo4j|memory`
-  - `KB_METADATA_BACKEND=sqlite|postgres`
+  - `KB_METADATA_BACKEND=sqlite|postgres|memory`
   - `KB_METADATA_DSN`
 - Qdrant:
   - `KB_QDRANT_URL`, `KB_QDRANT_COLLECTION_CHUNKS`, `KB_QDRANT_COLLECTION_MEMORY`
@@ -226,9 +226,11 @@ docker compose ps
 docker compose logs -f mcp
 ```
 
-If `KB_PROMETHEUS_ENABLED=true`, metrics are exposed on:
+If `KB_PROMETHEUS_ENABLED=true`, metrics are exposed by the app on `KB_PROMETHEUS_PORT`.
 
-- `http://127.0.0.1:${KB_PROMETHEUS_PORT:-9464}/metrics`
+- With current `docker-compose.yml`, host mapping is fixed to `9464:9464`, so default endpoint is:
+  - `http://127.0.0.1:9464/metrics`
+- If you change `KB_PROMETHEUS_PORT`, update compose port mapping accordingly.
 
 ### 7.3 Verify persistence after restart
 
@@ -280,6 +282,12 @@ Then run:
 ```bash
 docker compose up -d --build
 ```
+
+Note for this repository compose setup:
+
+- `docker-compose.yml` still defines local `qdrant` and `neo4j` services as dependencies of `mcp`.
+- In external mode, MCP uses endpoints from `KB_QDRANT_URL`/`KB_NEO4J_URI`, while local services may remain unused.
+- For strict MCP-only runtime without local DB containers, prefer Path A (source runtime) or a custom compose override.
 
 Network notes:
 

@@ -4,19 +4,46 @@
 
 **Enabled connectors:** github.
 
-Репозиторий `econolic/memorygraph_mcp` (default branch: `main`, видимость: private) реализует “сквозной” MVP/v1‑каркас **Hybrid Retrieval MCP‑сервера**: ingestion (filesystem + git diff), hybrid retrieval (vector + graph + rerank + деградация), ресурсы `kb://*` с server‑side ACL проверкой, два транспорта (stdio + Streamable HTTP), базовая observability (JSON‑логи, audit, in‑proc метрики), тесты, docker‑compose окружение (Qdrant + Neo4j + MCP). Это в целом хорошо совпадает с написанным PRD по архитектуре и набору контрактов.
+Репозиторий `econolic/memorygraph_mcp` (default branch: `main`, видимость: private) реализует “сквозной” MVP/v1‑каркас **Hybrid Retrieval MCP‑сервера**: ingestion (filesystem + git diff), hybrid retrieval (vector + graph + rerank + деградация), ресурсы `kb://*` с server‑side ACL проверкой, два транспорта (stdio + Streamable HTTP), production-baseline observability (JSON‑логи, audit, Prometheus exporter, OTel tracer), тесты, docker‑compose окружение (Qdrant + Neo4j + MCP). Это в целом хорошо совпадает с написанным PRD по архитектуре и набору контрактов.
 
 Ключевые сильные стороны реализации:
 - Реализован MCP‑сервер на базе FastMCP с **tools/resources/prompts** и Streamable HTTP endpoint `/mcp`, плюс transport‑защиты (DNS rebinding / Origin / allowlists) через настройки SDK, что соответствует требованиям MCP про безопасность транспорта. citeturn3search0  
 - Есть полноценный ingestion с **инкрементальными апдейтами по checksum**, включая удаление устаревших чанков из vector + graph + metadata.  
 - Реализован quality harness: `bench/run_benchmark.py` считает Recall@10 и nDCG@10 и может “гейтить” релиз, что прямо соответствует KPI в PRD.  
 
-Основные расхождения с PRD (наиболее нагрузочные):
-- Фильтры `tags/sources/updated_after` формально присутствуют в schema, но **не применяются** в vector/graph retrieval (фактически работают только `workspace_id` и `acl_subject`). Это снижает управляемость retrieval/сегментацию KB.
-- Graph retrieval в текущем виде фильтруется по `workspace_id`, но **не учитывает `acl_allow` на уровне графа**: `kb.graph_expand` потенциально может раскрывать структуру/связи внутри workspace даже для объектов, которые не должны быть видны субъекту (если в пределах workspace планируется object‑level ACL).
-- Chunking — простой char‑based splitter; он функционален, но качество retrieval может проигрывать sentence/token‑aware chunking (это подтверждают учебные материалы по chunking‑стратегиям). citeturn4search6  
+Основные расхождения с PRD (актуальные на текущем срезе):
+- OAuth 2.1/OIDC (`strict_oauth`) для HTTP-транспорта пока не внедрен; используется JWT `dual|strict`.
+- CI benchmark-diff pipeline ещё не автоматизирован (локальные benchmark gates есть, но нет PR-level diff policy).
+- Auto-ingest работает стабильно, но advanced hardening (`git_diff + periodic full`, retry/backoff policy) остаётся задачей следующего цикла.
 
 Отдельно: репозиторий приватный, поэтому внешние web‑инструменты не могут открывать исходники по URL. Все ссылки на код и фрагменты кода приведены по данным из GitHub‑коннектора; внешние нормативные утверждения подтверждены официальными веб‑источниками (MCP spec, docs Qdrant/Neo4j/SBERT).
+
+## Update (2026-02-21, post-implementation)
+
+Ниже краткий статус после внедрения плана доработки:
+
+- Фильтры retrieval (`tags`, `sources`, `updated_after`) применяются end-to-end в `qdrant` и `in-memory`.
+- В `kb.search.debug` добавлены и возвращаются поля:
+  - `filters_effective`
+  - `graph_acl_enforced`
+  - `fusion_mode`
+  - `graph_seed_count`
+  - `graph_node_count`
+  - `graph_chunk_bonus_count`
+  - `graph_nonzero`
+- Object-level ACL для graph операций выровнен (`resolve_entities`, `expand`, `explain_uri`), утечки вне ACL в пределах workspace заблокированы.
+- Закрыт graph-gap для relation-impact запросов: `resolve_entities` в Neo4j поддерживает tokenized matching, а контрольный integration тест фиксирует ненулевой graph bonus.
+- Для Qdrant добавлена idempotent инициализация payload-indexes (`workspace_id`, `acl_allow`, `source`, `source_path`, `updated_at`, `tags`).
+- Добавлены режимы качества retrieval:
+  - `KB_CHUNKING_MODE=char|sentence`
+  - `KB_FUSION_MODE=linear|rrf`
+- Embeddings pipeline усилен: batch encode, revision pinning, in-proc LRU cache, batched OpenAI-compatible requests с partial fallback.
+- Entity extraction усилен: `EntityExtractionConfig`, stoplist/min_len/allowlist patterns, alias merge без перезаписи, relation rules по ближайшим сущностям к trigger.
+- Observability доведён до production-baseline: OTel (`Resource(service.name=...)` + OTLP exporter) и Prometheus (`/metrics` на отдельном порту).
+- Добавлены и проходят профильные тесты по фильтрам/ACL/indexes/chunking/fusion/rerank.
+- Включена автоактуализация по умолчанию:
+  - `KB_AUTO_INGEST_ENABLED=true`
+  - startup cycle + interval refresh для roots из `KB_AUTO_INGEST_ROOTS`.
 
 ## Область, источники и ограничения
 
@@ -113,27 +140,29 @@ sequenceDiagram
 
 | Раздел PRD | Статус в repo | Основные точки кода |
 |---|---|---|
-| Онтология/схема графа | Частично→почти реализовано | Neo4jGraphStore: Document/Chunk/Entity + CONTAINS/MENTIONS/DOCUMENTED_IN + доменные rel’ы; но ACL в graph не выражен |
-| Ingestion | Реализовано (MVP/v1) | IngestionPipeline: filesystem + git diff + checksum + cleanup stale chunks |
-| Chunking | Частично | char‑based `max_chars/overlap`; нет token/sentence boundary |
-| Embeddings | Частично | LocalSentenceTransformerEmbedder + OpenAI‑compatible + fallback; нет батчинга/кэша/мульти‑векторов |
-| Entity extraction | Частично | regex + простая canonicalization; доменные связи rule‑based (очень грубо) |
-| Vector store | Частично→реализовано | QdrantVectorStore + in‑memory; фильтры tags/sources/updated_after не применяются; payload indexes не создаются |
-| Graph store | Частично | Neo4jGraphStore + in‑memory; graph_expand не учитывает object‑level ACL |
-| Fusion/rerank | Реализовано (простое) | Линейная fusion (vector/graph/memory) + lexical blend + CrossEncoder rerank; нет BM25/RRF/learned ranker |
+| Онтология/схема графа | Реализовано (MVP+) | Neo4jGraphStore: Document/Chunk/Entity + CONTAINS/MENTIONS/DOCUMENTED_IN + доменные rel’ы; object-level ACL enforcement для graph retrieval включен |
+| Ingestion | Реализовано (MVP/v1+) | IngestionPipeline: filesystem + git diff + checksum + cleanup stale chunks + workspace-consistent identity |
+| Chunking | Реализовано (флагируемо) | `KB_CHUNKING_MODE=char|sentence`, дефолт `char` для совместимости |
+| Embeddings | Реализовано (P1 baseline) | LocalSentenceTransformerEmbedder + OpenAI-compatible: batch encode, revision pinning, LRU cache, partial fallback |
+| Entity extraction | Реализовано (P1 baseline) | `EntityExtractionConfig`, stoplist/min_len/allowlist, alias merge, relation extraction по ближайшим сущностям |
+| Vector store | Реализовано (MVP+) | QdrantVectorStore + in‑memory; filters `tags/sources/updated_after/workspace/acl` применяются, payload indexes создаются idempotent |
+| Graph store | Реализовано (MVP+) | Neo4jGraphStore + in‑memory; `resolve_entities/expand/explain_uri` учитывают object-level ACL |
+| Fusion/rerank | Реализовано (MVP+) | `linear|rrf` fusion по флагу + CrossEncoder rerank с сохранением fallback поведения |
 | MCP tools/resources/prompts | Реализовано | kb.search / kb.graph_expand / kb.explain / kb.memory.* / kb.ingest.* + resources kb://* + prompts |
 | Транспорт | Реализовано | FastMCP transports: stdio + streamable-http path `/mcp` |
-| Auth/ACL | Частично | JWT (dual/strict) + deny-by-default ACL + resource ACL; не OAuth; graph не ACL‑aware |
-| Observability | Частично | JSON logs, audit logger, metrics registry, request_id; нет экспорта метрик/OTel |
-| Тесты | Реализовано (unit + harness) | pytest unit tests + `bench/run_benchmark.py` gates |
+| Auth/ACL | Частично | JWT (dual/strict) + deny-by-default ACL + resource ACL + graph ACL; OAuth 2.1 transport auth не внедрен |
+| Observability | Реализовано (P1 baseline) | JSON logs + audit, Prometheus counters/histograms (`/metrics` exporter), OTel tracing c OTLP exporter |
+| Тесты | Реализовано (расширено) | pytest unit/integration + `bench/run_benchmark.py` gates + отдельные тесты filters/graph ACL/qdrant indexes/chunking/fusion/rerank |
+| Актуализация знаний | Реализовано (default-on) | Автоактуализация `KB_AUTO_INGEST_*`: startup cycle + interval refresh по roots |
 
 Ниже — “разбор по разделам” с указанием артефактов и коротких цитат.
+Важно: часть детального разбора ниже фиксирует исторические наблюдения pre-implementation; актуальный статус соответствия отражен в матрице выше и в блоке `Update (2026-02-21, post-implementation)`.
 
 ### Разбор по разделам с привязкой к коду
 
 > Формат ссылок на код: GitHub permalink (private repo) — откроется при наличии доступа.
 
-**Онтология/схема графа** — *частично→почти реализовано*  
+**Онтология/схема графа** — *реализовано (MVP+)*  
 Имплементировано: `Document`, `Chunk`, `Entity`, рёбра `CONTAINS`, `MENTIONS`, `DOCUMENTED_IN`, плюс `DEPENDS_ON|CALLS|OWNS|IMPLEMENTS|AFFECTS`.  
 Ключевой код: `kb_mcp/storage/neo4j_store.py` (методы `upsert_mentions`, `upsert_entity_relations`, `resolve_entities`, `expand`).  
 Короткая цитата (создание нужных узлов/рёбер):
@@ -148,7 +177,7 @@ sequenceDiagram
 ```text
 https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/storage/neo4j_store.py
 ```
-Основной разрыв с PRD: object‑level ACL (на документ/чанк) в графовых узлах не записан и, соответственно, не фильтруется при `expand`. PRD требует server‑side ACL фильтрацию.  
+Разрыв по object-level ACL закрыт: graph retrieval и explainability проходят через ACL-фильтрацию; в качестве remaining risk остаётся качество доменных relation edges (нужен периодический quality контроль на размеченном наборе).  
 
 **Ingestion** — *реализовано*  
 Есть два инструмента ingestion (tools): `kb.ingest.filesystem` и `kb.ingest.git_diff` в MCP‑сервере. Внутри — инкрементальный pipeline на checksum, плюс удаление устаревших чанков из vector/graph/metadata.  
@@ -166,8 +195,8 @@ https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/ingest/pipeline.py
 https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/server/app.py
 ```
 
-**Chunking** — *частично*  
-Реализован простой sliding window по символам с overlap.  
+**Chunking** — *реализовано (флагируемо)*  
+Реализован простой sliding window по символам с overlap, плюс sentence-aware режим через `KB_CHUNKING_MODE=char|sentence`.  
 Код: `kb_mcp/ingest/chunking.py`.  
 Цитата:
 ```python
@@ -177,14 +206,14 @@ def chunk_text(text: str, *, max_chars: int = 800, overlap: int = 120) -> list[d
 ```text
 https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/ingest/chunking.py
 ```
-Риски качества: char‑based chunking может резать предложения/смысловые блоки; практики chunking обычно включают sentence/token‑aware стратегии. citeturn4search6  
+Риск качества в `char` режиме остаётся, но теперь контролируется feature-флагом и может быть переключён на `sentence` без изменения API.  
 
-**Embeddings** — *частично*  
-Есть embedder abstraction и два реалистичных режима: локальный sentence‑transformers и OpenAI‑совместимый HTTP `/embeddings`, плюс детерминированный fallback.  
+**Embeddings** — *реализовано (P1 baseline)*  
+Есть embedder abstraction и два режима: локальный sentence‑transformers и OpenAI‑совместимый HTTP `/embeddings`, оба с батчированием, кэшированием и детерминированным fallback.  
 Код: `kb_mcp/ingest/embeddings.py`, загрузка через `kb_mcp/bootstrap.py`.  
-Цитата (локальный ST и нормализация):
+Цитата (локальный ST: batch + нормализация):
 ```python
-vectors = self._model.encode(texts, normalize_embeddings=True)
+vectors = self._model.encode(texts, normalize_embeddings=True, batch_size=self._batch_size)
 return [[float(v) for v in vec] for vec in vectors]
 ```
 Ссылки:
@@ -192,24 +221,26 @@ return [[float(v) for v in vec] for vec in vectors]
 https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/ingest/embeddings.py
 https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/bootstrap.py
 ```
-Соответствие PRD: PRD подразумевает embeddings pipeline; реализовано. Но отсутствуют прод‑моменты: батч‑параметры/кэш/контроль модели/версии, а также мульти‑векторные схемы (например dense+sparse hybrid на стороне vector DB).
+Соответствие PRD: embeddings pipeline закрыт для MVP/P1 (batch/cache/revision pinning/traceability). Из remaining design-задач остаются multi-vector схемы и benchmark-diff automation (P2).
 
-**Entity extraction** — *частично*  
-Реализован regex‑extractor для таблиц вида `schema.table`, “символов” и кириллических терминов + rule‑based извлечение доменных рёбер на базе маркеров (“depends on/calls/…”).  
+**Entity extraction** — *реализовано (P1 baseline)*  
+Реализован regex‑extractor + `EntityExtractionConfig` (`stoplist`, `min_len`, `allowlist_patterns`), alias extraction/merge и rule‑based relation extraction с выбором ближайших сущностей к relation trigger.  
 Код: `kb_mcp/ingest/entity_extract.py`.  
 Цитата:
 ```python
 _TABLE_RE = re.compile(r"\b([a-z_]+\.[a-z_]+)\b", re.IGNORECASE)
 ...
-def extract_entity_relations(text: str, entity_uris: list[str]) -> list[dict[str, str]]:
+def extract_entity_relations(
+    text: str, entity_uris: list[str], cfg: EntityExtractionConfig | None = None
+) -> list[dict[str, str]]:
 ```
 Ссылка:
 ```text
 https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/ingest/entity_extract.py
 ```
-Главные ограничения vs PRD: нет дедупликации/alias‑сети beyond trivial, нет human‑in‑the‑loop, а `extract_entity_relations` связывает “первые две сущности” и может создавать шум в графе (в PRD этот риск отдельно отмечен).
+Главные ограничения vs PRD: остаётся rule-based характер extraction (без ML NER/RE), поэтому для production quality нужен регулярный offline precision/FPR контроль на размеченном наборе.
 
-**Vector store** — *частично→реализовано*  
+**Vector store** — *реализовано (MVP+)*  
 Есть полноценный backend для Qdrant и in‑memory backend; используется `query_points` с фильтрацией по `workspace_id` и `acl_allow`. Векторный размер проверяется на совпадение с embedder.dimensions.  
 Код: `kb_mcp/storage/qdrant_store.py`.  
 Цитата (query_points + filter):
@@ -227,9 +258,9 @@ response = self._client.query_points(
 https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/storage/qdrant_store.py
 ```
 С точки зрения native API Qdrant, `query_points` и фильтры — стандартная конструкция. citeturn4search9turn4search7  
-Открытая дыра к PRD: `SearchFilters` включает `tags/sources/updated_after`, но `_build_filter` их не использует; также нет создания payload‑индексов, хотя Qdrant подчёркивает важность индексирования фильтруемых полей (и strict mode может запрещать фильтрацию по неиндексированным полям). citeturn4search0turn4search3turn4search2  
+Разрыв с PRD по filters/indexes закрыт: `tags/sources/updated_after` применяются в поиске, payload-indexes для ключевых фильтров создаются idempotent на старте backend.
 
-**Graph store** — *частично*  
+**Graph store** — *реализовано (MVP+)*  
 Есть backend для Neo4j и in‑memory backend. В Neo4j используется `execute_query(... database_=..., routing_=READ)`; это корректно с точки зрения драйвера, но само по себе не является механизмом access control (Neo4j прямо предупреждает не использовать “read mode” как security). citeturn5search0  
 Код: `kb_mcp/storage/neo4j_store.py`.  
 Цитата (expand по переменной длине пути):
@@ -244,7 +275,7 @@ node_query = (
 https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/storage/neo4j_store.py
 ```
 Риск масштабирования: variable-length паттерны могут резко раздувать число путей/кандидатов; Neo4j рекомендует делать такие паттерны максимально специфичными/ограниченными для производительности. citeturn5search1  
-ACL‑дырка: фильтр по `acl_allow` отсутствует на уровне графа (только workspace); если в рамках workspace требуется object‑level разграничение, `kb.graph_expand` способен раскрывать структуру связи.
+Graph retrieval использует object-level ACL фильтрацию, а для relation-impact диагностики в `kb.search.debug` доступны `graph_seed_count`, `graph_node_count`, `graph_chunk_bonus_count`, `graph_nonzero`.
 
 **Fusion/rerank** — *реализовано (простое)*  
 Fusion: линейное взвешивание (vector/graph/memory) + доп. lexical blend; затем rerank cross‑encoder (или fallback).  
@@ -312,11 +343,13 @@ https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/security/auth.py
 Официальная рекомендация MCP для HTTP‑authorization — OAuth‑2.1‑совместимая модель и обязательный `Authorization: Bearer ...` header на каждый запрос. citeturn3search2turn3search6  
 Здесь OAuth не реализован (используется локальный JWT секрет), поэтому соответствие MCP authorization spec — **частичное** (есть bearer header, но нет OAuth flows/metadata/dynamic registration).
 
-**Observability** — *частично*  
+**Observability** — *реализовано (P1 baseline)*  
 Есть:
 - request id (contextvar) `ensure_request_id`
 - audit logger с `params_hash`, latency, identity source
-- in‑proc метрики (counters + p95 по таймерам)  
+- in‑proc метрики (counters + p95 по таймерам)
+- Prometheus counters/histograms (`kb_tool_calls_total`, `kb_tool_latency_ms`, `kb_retrieval_stage_latency_ms`, `kb_auto_ingest_*`)
+- OpenTelemetry tracing с OTLP exporter и `Resource(service.name=...)`  
 Код: `kb_mcp/observability/{audit,metrics,tracing}.py`, включение в `server/app.py`.  
 Ссылки:
 ```text
@@ -324,7 +357,7 @@ https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/observability/audit
 https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/observability/metrics.py
 https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/observability/tracing.py
 ```
-Но нет: Prometheus endpoint, OpenTelemetry traces, распределённые корреляции с внешним LLM host.
+Остающийся зазор: нет преднастроенных dashboards/alerts и SLO budget policy в репозитории (это организационный/ops слой поверх уже добавленной телеметрии).
 
 **Тесты и KPI‑метрики** — *реализовано (unit + offline harness)*  
 Есть unit tests на ACL/router/fallback/rerank/ingestion/persistence; есть benchmark harness, считающий Recall@10/nDCG@10/MRR и P95 latency gates (встроенные пороги совпадают с PRD).  
@@ -354,17 +387,17 @@ Pipeline не только добавляет/обновляет, но и уда
 
 ### Слабые стороны и потенциальные баги
 
-**ACL‑консистентность между vector/metadata и graph — неполная.**  
-Vector store фильтруется по `acl_allow`, resources/read тоже проверяют `acl_allow`. Но graph traversal фильтруется только `workspace_id`. Если внутри workspace допускаются разные ACL‑домены, `kb.graph_expand` может раскрывать факт существования документов/чанков/сущностей и их связи (пусть даже без текста). PRD требовал server‑side ACL везде.
+**OAuth 2.1/OIDC transport auth пока отсутствует.**  
+Текущая модель (`dual|strict` JWT) закрывает локальные и controlled deployment сценарии, но для enterprise SSO и MCP-compatible OAuth metadata нужен `strict_oauth` профиль (P2).
 
-**Фильтры `tags`, `sources`, `updated_after` в schema не реализованы в фактическом поиске.**  
-Это ухудшает управляемость retrieval (нет “search scope”), мешает сегментации, мешает расследованиям инцидентов, и может приводить к ненужному расширению candidate set.
+**Benchmark-diff CI отсутствует.**  
+Локальные benchmark gates работают, но нет автоматического PR-level сравнения baseline/new с fail policy при регрессии.
 
 **Neo4j variable-length traversal потенциально дорог.**  
 `MATCH p=(a)-[*1..depth]-(b)` даже при глубине ≤4 может взрываться на графах с высокой степенью, особенно если в одном workspace много документов и сущностей. Neo4j рекомендует делать такие запросы более специфичными (например, ограничивать типы отношений или добавлять pruning). citeturn5search1  
 
-**Qdrant: нет создания payload indexes для фильтров.**  
-Код активно использует фильтры по `workspace_id` и `acl_allow`. Qdrant подчёркивает, что payload поля не индексируются по умолчанию и что индексы следует создавать заранее; иначе фильтрация существенно ухудшает производительность, а strict mode может запрещать неиндексированную фильтрацию. citeturn4search0turn4search3turn4search2  
+**Auto-ingest hardening ограничен базовым циклом.**  
+Есть startup + interval cycle, counters и логи, но нет расширенной retry/backoff стратегии и гибридного режима `git_diff + periodic full`.
 
 **Reranker: двойной sigmoid (вероятно) и отсутствие провайдера `llm`.**  
 `RerankConfig.provider` присутствует (`cross_encoder|llm`), но фактическая реализация — всегда CrossEncoder (или fallback). Кроме того, `CrossEncoder.predict()` может уже возвращать sigmoid‑скоры для num_labels=1; повторная sigmoid‑трансформация может ухудшить калибровку (хотя порядок сохраняется). citeturn7search0turn7search12  
@@ -374,44 +407,39 @@ Vector store фильтруется по `acl_allow`, resources/read тоже п
 
 ## Рекомендации и приоритетный roadmap
 
-### Таблица roadmap
+### Актуальный roadmap (после закрытия P0/P1)
 
-| Приоритет | Рекомендация | Ожидаемый эффект | Изменяемые файлы |
-|---|---|---|---|
-| P0 | Добавить object‑level ACL в граф (Document/Chunk/Entity) и фильтровать в `expand`/`resolve_entities`/`explain_uri` | Закрывает ключевой риск утечки через graph_expand | `kb_mcp/storage/neo4j_store.py`, `kb_mcp/storage/in_memory_graph.py`, `kb_mcp/ingest/pipeline.py`, `kb_mcp/server/app.py` |
-| P0 | Реализовать filters `tags/sources/updated_after` end‑to‑end (ingestion → payload → vector/metadata → query_filter) | Управляемость retrieval, фильтрация по источникам/свежести | `kb_mcp/server/schemas.py`, `kb_mcp/ingest/pipeline.py`, `kb_mcp/storage/qdrant_store.py`, metadata store |
-| P1 | Создавать payload indexes в Qdrant для `workspace_id`, `acl_allow`, `source`, `updated_at` (и др.) на старте | Производительность и совместимость со strict mode | `kb_mcp/storage/qdrant_store.py`, bootstrap init |
-| P1 | Переписать graph expansion query: ограничить типы ребер по умолчанию, уйти от “полностью неориентированного” шаблона | Снижение cost/latency p95, меньше “шума” в граф бонусе | `kb_mcp/storage/neo4j_store.py` |
-| P1 | Улучшить entity extraction: нормализация, stoplist, dedup, canonical_key стратегия по доменам (таблицы/сервисы/символы) | Меньше мусора в графе и в evidence.entities | `kb_mcp/ingest/entity_extract.py` |
-| P2 | Добавить RRF как альтернативу линейной fusion, плюс опциональный BM25/sparse (Qdrant text search/BM25) | Рост recall без тяжёлого ML ranker | `kb_mcp/retrieval/hybrid.py`, новые модули `rrf.py` |
-| P2 | Export метрик (Prometheus) + traces (OpenTelemetry) | Прод-эксплуатация, SLO, RCA | `kb_mcp/observability/*`, добавить новый tool/resource |
-| P2 | OAuth‑совместимый auth для HTTP‑транспорта (как в MCP authorization spec) | Соответствие MCP best practice; SSO/Scoping | `kb_mcp/security/auth.py`, transport middleware |
+Закрыто в текущем цикле:
+- object-level ACL для graph retrieval;
+- graph-gap в Neo4j resolver (tokenized matching);
+- filters `tags/sources/updated_after` end-to-end;
+- payload indexes в Qdrant;
+- feature flags `KB_FUSION_MODE`, `KB_CHUNKING_MODE`;
+- расширенные debug-поля `kb.search`;
+- entity extraction quality baseline (`EntityExtractionConfig`, alias merge, nearest-entity relations);
+- embeddings quality/perf baseline (batching, cache, model revision pinning, partial fallback);
+- observability production baseline (OTel + Prometheus exporter);
+- автоактуализация по умолчанию (`KB_AUTO_INGEST_*`).
 
-### Конкретные файлы, которые почти наверняка будут правиться (ссылки)
+### Следующие шаги для доработки
 
-```text
-https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/storage/neo4j_store.py
-https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/storage/qdrant_store.py
-https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/ingest/pipeline.py
-https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/retrieval/hybrid.py
-https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/server/app.py
-https://github.com/econolic/memorygraph_mcp/blob/main/kb_mcp/server/schemas.py
-```
+| Приоритет | Следующий шаг | Ожидаемый эффект | Критерий готовности | Изменяемые файлы |
+|---|---|---|---|---|
+| P2 | OAuth 2.1/OIDC JWKS transport auth (`strict_oauth`) | Соответствие MCP auth best practices и enterprise SSO | Реализован token verifier flow + migration path `dual -> strict -> strict_oauth` | `kb_mcp/security/auth.py`, `kb_mcp/server/transport_http.py`, `docs/install_deploy_config.md` |
+| P2 | Benchmark-diff CI и расширение benchmark dataset (RU+EN, >300 queries) | Более надежная и автоматизированная оценка retrieval quality | Автоматический diff baseline/new в CI + fail policy на регрессии | `bench/queries.jsonl`, `bench/relevance.jsonl`, `bench/run_benchmark.py`, `.github/workflows/benchmark.yml` |
+| P2 | Auto-ingest hardening: `git_diff + periodic full`, retry/backoff policy и smoke freshness tests | Предсказуемая свежесть индекса и контролируемое восстановление после сбоев | Нет “stale” инцидентов в smoke периоде + метрики причин фейлов | `kb_mcp/ingest/auto_ingest.py`, `kb_mcp/ingest/pipeline.py`, `docs/runbook.md` |
+| P2 | Observability maturity: дашборды/алерты и SLO policy поверх уже внедренных метрик/трейсов | Быстрее RCA и формализованные SLO для retrieval/ingest | Набор alert rules + runbook ссылок + weekly KPI snapshot | `docs/runbook.md`, `docs/kpi_report.md`, infra manifests |
 
-### План тестов и метрик качества
+### План тестов и метрик качества для следующего цикла
 
 Что уже есть:
-- Recall@10, nDCG@10, MRR, P95 latency и “faithfulness proxy” через citation coverage в bench harness.
+- Recall@10, nDCG@10, MRR, P95 latency и citation coverage в benchmark harness.
 
-Что добавить (чтобы действительно удерживать качество на реальных данных):
-- **Regression suite** на фиксированном “mini‑corpus” (20–50 документов) с ожидаемыми источниками.
-- **Δ‑метрики по изменениям ingestion**: сколько чанков/сущностей добавилось/удалилось; рост графа.
-- **Monitoring**: error rate graph backend, fallback ratio (`debug.fallback_mode`), latency per stage (vector/graph/rerank) уже есть в payload — нужно экспортировать.
-
-Примеры тест‑кейсов (pytest, концептуальные):
-- `test_graph_expand_enforces_acl_allow`: ingest 2 docs в одном workspace с разными `acl_allow`; убедиться, что graph_expand не возвращает узлы/ребра “чужого” документа.
-- `test_updated_after_filter`: ingest doc с `updated_at=t1`, затем запрос с `updated_after=t2>t1` должен вернуть 0 результатов.
-- `test_qdrant_payload_indexes_present`: при init коллекции создать/проверить payload index на `workspace_id` и `acl_allow` (настоящий integration test).
+Что добавить:
+- regression suite на фиксированном mini-corpus с ожидаемыми citations;
+- quality-метрики по entity extraction (precision/false-positive rate на размеченном наборе);
+- ingestion freshness SLI: время от изменения файла до появления в retrieval;
+- stage-level latency telemetry (vector/graph/rerank) через экспортируемые метрики.
 
 ## MCP‑контракт, payload‑примеры, LLM‑flow и code skeletons
 
@@ -725,5 +753,4 @@ spec:
       targetPort: 8080
 ```
 
-**Наблюдаемость (metrics/traces/logs)**: сейчас есть JSON‑логи и audit‑логгер; для production обычно добавляют Prometheus endpoint и OpenTelemetry traces. Это облегчит SLO и RCA, особенно при деградации graph‑backend (fallback). Также стоит учитывать, что переменные‑длины graph traversal могут стать главным источником tail latency, и это нужно мониторить отдельно. citeturn5search1turn5search4
-
+**Наблюдаемость (metrics/traces/logs)**: в текущем коде уже есть JSON‑логи + audit‑логгер, Prometheus endpoint и OpenTelemetry traces (OTLP). Следующий уровень зрелости — dashboards/alerts и SLO policy, особенно для контроля tail latency на variable-length graph traversal. citeturn5search1turn5search4

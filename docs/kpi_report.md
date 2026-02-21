@@ -39,7 +39,7 @@ Source reports:
 ## Security
 
 - ACL leakage incidents (P0): 0
-  - Source: strict E2E acceptance report `bench/acceptance_e2e_strict_report_fixed.json` (`FAILED=[]`)
+  - Source: strict auth/ACL integration checks in `tests/test_http_auth_resources_acl.py` and local strict-mode acceptance run.
 - Audit coverage: MCP tool calls audited (`kb.search`, `kb.graph_expand`, `kb.explain`, `kb.memory.*`, `kb.ingest.*`)
 - Auth mode tested: strict
 - Identity source distribution (observed in strict HTTP integration + acceptance):

@@ -9,7 +9,7 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
 - Ingestion tools: `kb.ingest.filesystem`, `kb.ingest.git_diff`
 - ACL-protected resources: `kb://doc/*`, `kb://chunk/*`, `kb://entity/*`, `kb://memory/*`
 - Hybrid retrieval (vector + graph + rerank) with fallback behavior
-- Metadata persistence (`sqlite` default, `postgres` optional)
+- Metadata persistence (`sqlite` default, `postgres` optional, `memory` for tests/dev)
 - Runtime feature flags for retrieval quality:
   - `KB_FUSION_MODE=linear|rrf`
   - `KB_CHUNKING_MODE=char|sentence`
