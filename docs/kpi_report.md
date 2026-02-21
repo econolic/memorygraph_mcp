@@ -47,6 +47,18 @@ Source reports:
   - `payload_jwt`: not observed
   - `legacy_acl`: not observed (strict mode)
 
+## Operational Sync
+
+- Auto-ingest enabled: true
+- Auto-ingest startup cycle observed: true
+- Auto-ingest interval: 900 seconds
+- Indexed coverage for `project_sync`: 81/81
+- Indexed coverage for `project_delta`: 34/34
+- Last observed document update timestamp (UTC): `2026-02-21T17:37:37.134004+00:00`
+- Runtime evidence:
+  - `auto_ingest_started` log at `2026-02-21T17:37:23.572889+00:00`
+  - `auto_ingest_cycle` startup log at `2026-02-21T17:37:44.095641+00:00` (`created=1`, `updated=3`, `failed_roots=0`)
+
 ## Decision
 
 - Go / No-go: **Go**

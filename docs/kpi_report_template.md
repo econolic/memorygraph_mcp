@@ -39,6 +39,15 @@
 - Auth mode tested (`dual|strict`):
 - Identity source distribution (`authorization_header|payload_jwt|legacy_acl`):
 
+## Operational Sync
+
+- Auto-ingest enabled (`true|false`):
+- Auto-ingest startup cycle observed (`true|false`):
+- Auto-ingest interval (seconds):
+- Indexed coverage for `project_sync` (indexed/ingestable):
+- Indexed coverage for `project_delta` (indexed/ingestable):
+- Last observed document update timestamp (UTC):
+
 ## Decision
 
 - Go / No-go:

@@ -17,6 +17,9 @@ Use this runbook for live incidents and recovery actions.
 3. Verify Qdrant and Neo4j availability.
 4. Verify metadata backend connectivity (`sqlite` lock/path or `postgres` DSN).
 5. Verify strict auth behavior (`missing_bearer_token` when bearer is absent).
+6. Verify startup auto-sync:
+   - `auto_ingest_started` appears in logs after restart.
+   - `auto_ingest_cycle` appears with `failed_roots=0`.
 
 ## Common Incidents
 
@@ -71,6 +74,16 @@ Use this runbook for live incidents and recovery actions.
   2. Compare no-rerank vs rerank reports.
   3. Verify ingestion freshness and stale chunk cleanup.
   4. Compare filtered subset metrics (`filtered_recall_at_10`, `filtered_ndcg_at_10`).
+
+### Auto-ingest lag or stopped updates
+
+- Symptom: project changed but retrieval still serves old chunks.
+- Actions:
+  1. Check `KB_AUTO_INGEST_ENABLED`, `KB_AUTO_INGEST_ROOTS`, `KB_AUTO_INGEST_INTERVAL_S`.
+  2. Validate root paths from runtime perspective (container vs host paths).
+  3. Check logs for `auto_ingest_cycle` and `auto_ingest_root_failed`.
+  4. Run one manual `kb.ingest.filesystem` call for affected root.
+  5. If needed, restart MCP and confirm new startup cycle logs.
 
 ## Persistence Recovery
 

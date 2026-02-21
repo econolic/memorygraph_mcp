@@ -29,6 +29,7 @@ Primary data flows:
 2. Retrieval (`kb.search`) runs hybrid retrieval (vector + graph + rerank).
 3. Conversation memory (`kb.memory.*`) persists and retrieves subject/workspace-scoped memory.
 4. Resources (`kb://doc/*`, `kb://chunk/*`, `kb://entity/*`, `kb://memory/*`) are ACL-checked server-side.
+5. Auto-ingest loop (enabled by default) refreshes configured roots on startup and by interval.
 
 ## 3. Prerequisites
 
@@ -86,6 +87,15 @@ Key variables:
   - `KB_AUTO_INGEST_ACL_SUBJECT=<subject>`
   - `KB_AUTO_INGEST_INTERVAL_S=<seconds>`
   - `KB_AUTO_INGEST_RUN_ON_START=true|false`
+
+Default auto-ingest profile:
+
+- `KB_AUTO_INGEST_ENABLED=true`
+- `KB_AUTO_INGEST_ROOTS=/app/.kb_mcp/project_sync,./kb_mcp`
+- `KB_AUTO_INGEST_WORKSPACE_ID=w1`
+- `KB_AUTO_INGEST_ACL_SUBJECT=u1`
+- `KB_AUTO_INGEST_INTERVAL_S=900`
+- `KB_AUTO_INGEST_RUN_ON_START=true`
 
 Security recommendation for HTTP runtime:
 
@@ -215,6 +225,19 @@ docker compose restart
 
 4. Repeat `kb.search`; results should still be available.
 
+### 7.4 Verify auto-ingest startup cycle
+
+After `docker compose up -d --build`:
+
+```bash
+docker compose logs --since 2m mcp | rg "auto_ingest_started|auto_ingest_cycle"
+```
+
+Expected:
+
+- `auto_ingest_started` with configured roots/workspace/subject.
+- At least one `auto_ingest_cycle` line with counters (`created`, `updated`, `failed_roots`).
+
 Persistent host paths (default):
 
 - Qdrant: `./.docker-data/qdrant`
@@ -325,6 +348,7 @@ curl -sS http://127.0.0.1:8080/mcp \
 - Ingestion:
   - `kb.ingest.filesystem`: full scan + incremental checksum updates.
   - `kb.ingest.git_diff`: ingest only changed files by git diff baseline.
+  - auto-ingest loop: periodic background refresh from `KB_AUTO_INGEST_ROOTS`.
 - Memory:
   - saved per `workspace_id` + `subject`, optional `session_id` context;
   - retention is indefinite by default;
@@ -342,6 +366,8 @@ curl -sS http://127.0.0.1:8080/mcp \
 3. `kb.search` returns results with citations.
 4. `kb.memory.upsert` -> `kb.memory.search` -> `kb.memory.delete` lifecycle works.
 5. With graph disabled/unavailable, `kb.search` reports vector fallback mode.
+6. `kb.search.debug` includes `filters_effective`, `graph_acl_enforced`, `fusion_mode`.
+7. Startup log contains `auto_ingest_started` and one `auto_ingest_cycle`.
 
 ### 12.2 Security
 
@@ -390,6 +416,14 @@ Record final values in `docs/kpi_report.md` using `docs/kpi_report_template.md`.
 - verify `KB_NEO4J_URI`, credentials, container health;
 - check `kb.search.debug.fallback_mode` and logs;
 - restore graph service and retry query.
+
+### Auto-ingest not running or stale
+
+- verify `KB_AUTO_INGEST_ENABLED=true`;
+- verify `KB_AUTO_INGEST_ROOTS` paths exist inside runtime (container path, not host path);
+- check logs for `auto_ingest_started` and `auto_ingest_cycle`;
+- if `failed_roots > 0`, inspect `auto_ingest_root_failed` entries and fix path/permissions;
+- trigger one manual refresh via `kb.ingest.filesystem` for the problematic root.
 
 ### Postgres metadata errors
 

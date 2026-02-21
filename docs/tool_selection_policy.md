@@ -35,6 +35,9 @@
 3. Если пользователь просит “почему ты так ответил”, вызывай `kb.explain`.
 4. Если в запросе есть “как мы делали раньше”, “мой прошлый контекст”, сначала вызывай `kb.memory.search`, затем `kb.search`.
 5. Не сохраняй в память ничего без `citations` и достаточного `confidence`.
+6. Если пользователь явно просит обновить KB/пересканировать проект:
+   - сначала предпочитай `kb.ingest.git_diff` (быстрее и дешевле);
+   - используй `kb.ingest.filesystem`, если нужен полный перескан или git baseline недоступен.
 
 ## 4. Политика вызовов (обязательная)
 
@@ -114,6 +117,14 @@
   - call `kb.memory.delete(all_for_subject=true, workspace_id, subject)`
   - confirm deleted_count.
 
+### Example 7: Принудительное обновление индекса
+
+- User: “Обнови знания по последним изменениям в репозитории.”
+- Plan:
+  - call `kb.ingest.git_diff(repo_root='...', workspace_id, acl_subject, since_ref='HEAD~1')`
+  - если измененных файлов нет или baseline неизвестен, fallback на `kb.ingest.filesystem(root_path='...')`
+  - call `kb.search` для smoke-проверки свежих данных.
+
 ## 7. JSON decision schema (опционально)
 
 Можно использовать промежуточный structured шаг:
@@ -137,6 +148,7 @@
 - Сохранять memory без citations.
 - Использовать только graph без первоначального retrieval evidence.
 - Давать “уверенный” ответ при пустом результате tools.
+- Вызывать полный `kb.ingest.filesystem` без необходимости, когда достаточно `kb.ingest.git_diff`.
 
 ## 9. Минимальный SLA для ответа
 

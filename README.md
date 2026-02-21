@@ -72,6 +72,19 @@ docker compose up -d --build
 - HTTP transport supports Host/Origin restrictions via `KB_TRANSPORT_ALLOWED_HOSTS` and `KB_TRANSPORT_ALLOWED_ORIGINS`.
 - Graph retrieval enforces object ACL by default (`KB_GRAPH_ENFORCE_OBJECT_ACL=true`).
 
+## Runtime Defaults
+
+- Auto-actualization is enabled by default and starts at server boot.
+- Default roots: `/app/.kb_mcp/project_sync` and `./kb_mcp`.
+- Default target identity: `workspace_id=w1`, `acl_subject=u1`.
+- On startup, look for log lines:
+  - `auto_ingest_started`
+  - `auto_ingest_cycle`
+- For retrieval diagnostics, inspect `kb.search` response fields:
+  - `debug.filters_effective`
+  - `debug.graph_acl_enforced`
+  - `debug.fusion_mode`
+
 ## Benchmark Commands
 
 ```bash
