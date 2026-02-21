@@ -29,6 +29,17 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
   - `KB_AUTO_INGEST_RUN_ON_START=true`
   - important: ingest is checksum-driven; unchanged files are skipped (no forced graph backfill)
 
+## Tool Descriptions (User View)
+
+- `kb.search`: find relevant knowledge snippets with citations.
+- `kb.graph_expand`: show entity relations, dependency chains, and impact paths.
+- `kb.explain`: explain why retrieved results are relevant.
+- `kb.memory.upsert`: save confirmed facts/decisions/preferences for a user/workspace.
+- `kb.memory.search`: retrieve previously saved user/workspace context.
+- `kb.memory.delete`: delete saved memory by IDs or all memory for a subject.
+- `kb.ingest.filesystem`: ingest knowledge from a folder (full scan with incremental updates).
+- `kb.ingest.git_diff`: ingest only files changed in git diff (faster incremental refresh).
+
 ## Documentation Map
 
 - Full install/deploy/config guide: `docs/install_deploy_config.md`
@@ -81,6 +92,23 @@ docker compose up -d --build
 - HTTP transport supports Host/Origin restrictions via `KB_TRANSPORT_ALLOWED_HOSTS` and `KB_TRANSPORT_ALLOWED_ORIGINS`.
 - Graph retrieval enforces object ACL by default (`KB_GRAPH_ENFORCE_OBJECT_ACL=true`).
 
+## Session and Identity Model
+
+- Identity is resolved from bearer token claims (`sub`, `workspace_id`) in strict modes.
+- `workspace_id` is the main boundary for knowledge isolation.
+- Knowledge base content (documents/chunks/entities) is shared inside the same workspace, subject to ACL.
+- Memory records are stored with `workspace_id`, `subject`, and `session_id`.
+- Current retrieval behavior for memory is subject/workspace-scoped; `session_id` is accepted in contracts but not used as a hard filter in memory search.
+
+Practical implications when switching agents/sessions:
+
+- Same `sub` + same `workspace_id` + different agent session:
+  - the agent can still access prior memory for that user/workspace.
+- Different `workspace_id`:
+  - data is isolated; cross-workspace access is denied.
+- Different `sub` in same workspace:
+  - visibility depends on ACL (`acl_allow`) of stored objects.
+
 ## Runtime Defaults
 
 - Auto-actualization is enabled by default and starts at server boot.
@@ -108,6 +136,33 @@ docker compose up -d --build
   - `KB_AUTO_INGEST_GIT_SINCE_REF`
   - `KB_AUTO_INGEST_RETRY_ATTEMPTS`
   - `KB_AUTO_INGEST_RETRY_BACKOFF_S`
+
+## Data Portability and Backup
+
+You can move the knowledge base to another machine.
+
+Docker runtime (local persistent mode):
+
+1. Stop services:
+   - `docker compose down`
+2. Copy data directories and config:
+   - `.docker-data/qdrant`
+   - `.docker-data/neo4j/data`
+   - `.docker-data/mcp`
+   - `.env`
+3. On target machine, place files in the same paths and run:
+   - `docker compose up -d --build`
+
+Notes:
+
+- Keep source and target on compatible image versions (Qdrant/Neo4j/MCP).
+- For consistent snapshots, copy data while services are stopped.
+- MCP currently has no dedicated export/import tool; portability is done at storage level (filesystem/DB backup).
+
+External DB mode:
+
+- Qdrant and Neo4j: use native backup/restore of the managed services.
+- Metadata Postgres: use `pg_dump` / `pg_restore`.
 
 ## Benchmark Commands
 
