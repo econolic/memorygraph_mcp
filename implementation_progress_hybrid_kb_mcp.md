@@ -1,5 +1,8 @@
 # Implementation Progress — Hybrid KB MCP
 
+> Status note (2026-02-21): historical implementation log.
+> Runtime truth and operational procedures are maintained in `README.md`, `docs/install_deploy_config.md`, and `docs/runbook.md`.
+
 ## Цель
 Реализовать full-scope PRD (MVP + v1 + v2): MCP server (stdio+HTTP), hybrid retrieval (Qdrant+Neo4j), persistent conversation memory, JWT/ACL, audit, incremental ingestion, auto write-back validation.
 

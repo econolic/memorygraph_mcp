@@ -13,7 +13,8 @@
     ],
     "requires_citations": true,
     "fallback": {
-      "graph_unavailable": "vector_only_with_disclaimer"
+      "graph_unavailable": "vector_only_with_disclaimer",
+      "graph_nonzero_false_on_relation_query": "state_low_graph_confidence"
     }
   },
   "intent_rules": [

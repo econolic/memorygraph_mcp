@@ -1,5 +1,9 @@
 # Оценка реализации econolic/memorygraph_mcp относительно PRD Hybrid Retrieval MCP для KB
 
+> Status note (2026-02-21): analytical snapshot document.
+> Some conclusions here may be superseded by later implementation changes.
+> Validate current behavior against `README.md`, `docs/install_deploy_config.md`, and live MCP smoke checks.
+
 ## Executive summary
 
 **Enabled connectors:** github.

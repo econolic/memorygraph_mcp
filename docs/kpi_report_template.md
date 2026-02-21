@@ -47,9 +47,11 @@
 - Auto-ingest enabled (`true|false`):
 - Auto-ingest startup cycle observed (`true|false`):
 - Auto-ingest interval (seconds):
-- Indexed coverage for `project_sync` (indexed/ingestable):
-- Indexed coverage for `project_delta` (indexed/ingestable):
-- Last observed document update timestamp (UTC):
+- Metadata documents by workspace:
+- Graph documents by workspace:
+- Graph coverage for target workspace (graph_docs/metadata_docs):
+- Last observed document update timestamp for target workspace (UTC):
+- Graph signal control suite (`graph_nonzero_rate`, nonzero/total):
 
 ## Decision
 

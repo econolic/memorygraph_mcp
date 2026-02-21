@@ -37,7 +37,8 @@
 5. Не сохраняй в память ничего без `citations` и достаточного `confidence`.
 6. Если пользователь явно просит обновить KB/пересканировать проект:
    - сначала предпочитай `kb.ingest.git_diff` (быстрее и дешевле);
-   - используй `kb.ingest.filesystem`, если нужен полный перескан или git baseline недоступен.
+   - используй `kb.ingest.filesystem`, если нужен полный перескан или git baseline недоступен;
+   - учитывай, что ingestion checksum-driven: неизменённые файлы будут пропущены и force-backfill графа не гарантирован текущими контрактами.
 
 ## 4. Политика вызовов (обязательная)
 
@@ -48,6 +49,7 @@
 3. Выполнить tool calls.
 4. Проверить, что в ответе есть evidence для ключевых утверждений.
 5. Только после этого сформировать текст ответа.
+6. Для relation-impact запросов проверить `kb.search.debug.graph_nonzero`; если `false`, явно указать пониженную уверенность в графовой части ответа.
 
 Если tool вернул ошибку:
 
@@ -123,7 +125,8 @@
 - Plan:
   - call `kb.ingest.git_diff(repo_root='...', workspace_id, acl_subject, since_ref='HEAD~1')`
   - если измененных файлов нет или baseline неизвестен, fallback на `kb.ingest.filesystem(root_path='...')`
-  - call `kb.search` для smoke-проверки свежих данных.
+  - call `kb.search` для smoke-проверки свежих данных
+  - если графовый сигнал не восстановился, явно сообщить что текущие MCP-контракты не предоставляют гарантированный force-backfill для неизменённых файлов.
 
 ## 7. JSON decision schema (опционально)
 
@@ -155,5 +158,6 @@
 - Для ключевых утверждений должны быть citations.
 - Если citations отсутствуют, ответ должен явно содержать дисклеймер.
 - При деградации (например, граф недоступен) это должно быть указано в ответе.
+- При `graph_nonzero=false` на структурных запросах это должно быть указано в ответе.
 - Если в `decision_trace.identity_source=legacy_acl`, помечать ответ как compatibility-mode и запрашивать переход на header auth.
 - При отладке retrieval учитывать `debug.filters_effective`, `debug.graph_acl_enforced`, `debug.fusion_mode`.

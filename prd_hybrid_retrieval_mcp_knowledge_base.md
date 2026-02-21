@@ -1,5 +1,8 @@
 # PRD — Hybrid Retrieval MCP для базы знаний (Vector + Graph)
 
+> Status note (2026-02-21): this is the target product design document.
+> For actual runtime behavior and current operational constraints, use `README.md` and `docs/install_deploy_config.md`.
+
 **Целевая платформа:** LLM‑host (любой), MCP‑сервер (Python), Vector Store + Graph DB
 
 ---
@@ -889,4 +892,3 @@ def test_fuse_scores_linear() -> None:
 2. ACL и аудит: реализовать до подключения приватных источников.
 3. Entity extraction: сначала deterministic (парсеры/словарь), LLM‑extraction позже и только с валидацией.
 4. Fusion/rerank: начать с линейного, затем обучить ranker на логах.
-

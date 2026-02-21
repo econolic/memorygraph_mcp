@@ -1,10 +1,10 @@
-# KPI Report
+# KPI Report (Operational Snapshot)
 
 ## Release
 
 - Version: 0.1.0
 - Date: 2026-02-21
-- Evaluator: Codex (local runtime benchmark)
+- Evaluator: Codex (local runtime + benchmark artifacts)
 
 ## Retrieval Metrics
 
@@ -16,6 +16,10 @@
 Source reports:
 - `bench/report_no_rerank.json`
 - `bench/report_with_rerank.json`
+
+Note:
+- Retrieval metrics above come from benchmark artifacts.
+- Operational sync metrics below come from live runtime checks on 2026-02-21.
 
 ## Latency (P95)
 
@@ -52,19 +56,23 @@ Source reports:
 - Auto-ingest enabled: true
 - Auto-ingest startup cycle observed: true
 - Auto-ingest interval: 900 seconds
-- Indexed coverage for `project_sync`: 81/81
-- Indexed coverage for `project_delta`: 34/34
-- Last observed document update timestamp (UTC): `2026-02-21T17:37:37.134004+00:00`
+- Metadata documents by workspace: `w1=213`, `w_docker=45`, `w_fix_1=1`, `w_fix_2=1`
+- Graph documents by workspace: `w1=98` (others absent in graph backend)
+- Graph coverage for `w1` (docs in graph / docs in metadata): `98/213 = 0.46`
+- Last observed metadata document update for `w1` (UTC): `2026-02-21T19:46:29.634903+00:00`
+- Graph signal control suite (10 relation-impact queries): `graph_nonzero_rate = 0.70 (7/10)`
 - Runtime evidence:
-  - `auto_ingest_started` log at `2026-02-21T17:37:23.572889+00:00`
-  - `auto_ingest_cycle` startup log at `2026-02-21T17:37:44.095641+00:00` (`created=1`, `updated=3`, `failed_roots=0`)
+  - `auto_ingest_started` observed after restart
+  - interval cycles observed with `failed_roots=0`
+  - multiple cycles observed with `created=0` and `updated=0` (checksum-skip behavior)
 
 ## Decision
 
-- Go / No-go: **Go**
+- Go / No-go: **No-go for graph-sensitive production answers**
 - Required follow-ups:
-  - Add larger multilingual benchmark slice (RU+EN) to validate cross-lingual retrieval at 300+ queries.
-  - Calibrate benchmark-diff CI thresholds after first 3 PR runs with real variance.
+  - Add MCP-level graph sync health contract and expose coverage status to LLM.
+  - Add controlled backfill/reindex contract (admin-scoped) for checksum-skip recovery cases.
+  - Keep vector-backed answers available, but require low-confidence disclaimer when `graph_nonzero=false` on relation queries.
 
 ## Benchmark Commands
 

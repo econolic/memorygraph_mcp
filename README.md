@@ -27,12 +27,14 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
   - `KB_AUTO_INGEST_ACL_SUBJECT=u1`
   - `KB_AUTO_INGEST_INTERVAL_S=900`
   - `KB_AUTO_INGEST_RUN_ON_START=true`
+  - important: ingest is checksum-driven; unchanged files are skipped (no forced graph backfill)
 
 ## Documentation Map
 
 - Full install/deploy/config guide: `docs/install_deploy_config.md`
 - Operational incident handling: `docs/runbook.md`
 - LLM tool routing policy: `docs/tool_selection_policy.md`
+- LLM↔MCP context control roadmap: `docs/llm_mcp_context_control_plan.md`
 - KPI template: `docs/kpi_report_template.md`
 - Current KPI report: `docs/kpi_report.md`
 
@@ -82,6 +84,7 @@ docker compose up -d --build
 ## Runtime Defaults
 
 - Auto-actualization is enabled by default and starts at server boot.
+- Auto-actualization is incremental by checksum. Startup/interval cycles do not force reindex for unchanged files.
 - Default roots: `/app/.kb_mcp/project_sync` and `./kb_mcp`.
 - Default target identity: `workspace_id=w1`, `acl_subject=u1`.
 - On startup, look for log lines:

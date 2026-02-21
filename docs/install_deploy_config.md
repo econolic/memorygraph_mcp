@@ -30,6 +30,7 @@ Primary data flows:
 3. Conversation memory (`kb.memory.*`) persists and retrieves subject/workspace-scoped memory.
 4. Resources (`kb://doc/*`, `kb://chunk/*`, `kb://entity/*`, `kb://memory/*`) are ACL-checked server-side.
 5. Auto-ingest loop (enabled by default) refreshes configured roots on startup and by interval.
+   - Important: refresh is checksum-driven; unchanged files are skipped and are not force-reindexed.
 
 ## 3. Prerequisites
 
@@ -447,6 +448,7 @@ curl -sS http://127.0.0.1:8080/mcp \
   - `kb.ingest.filesystem`: full scan + incremental checksum updates.
   - `kb.ingest.git_diff`: ingest only changed files by git diff baseline.
   - auto-ingest loop: periodic background refresh from `KB_AUTO_INGEST_ROOTS`.
+  - startup auto-ingest is not a forced backfill; unchanged files are skipped by checksum.
 - Memory:
   - saved per `workspace_id` + `subject`, optional `session_id` context;
   - retention is indefinite by default;
@@ -469,6 +471,9 @@ curl -sS http://127.0.0.1:8080/mcp \
    - `graph_seed_count`, `graph_node_count`, `graph_chunk_bonus_count`, `graph_nonzero`
 7. Startup log contains `auto_ingest_started` and one `auto_ingest_cycle`.
 8. If graph is enabled and query has structural intent, `graph_nonzero` should be `true` for most cases.
+9. Verify graph/metadata sync for target workspace:
+   - compare metadata docs count vs graph docs count;
+   - if coverage is materially below target, schedule controlled reindex/backfill procedure.
 
 ### 12.2 Security
 
@@ -533,7 +538,9 @@ CI benchmark diff:
 - if `failed_roots > 0`, inspect `auto_ingest_root_failed` entries and fix path/permissions;
 - inspect `auto_ingest.root_failure` metrics and `auto_ingest_retry` logs for root cause classes;
 - tune `KB_AUTO_INGEST_FULL_INTERVAL_CYCLES`, `KB_AUTO_INGEST_RETRY_ATTEMPTS`, `KB_AUTO_INGEST_RETRY_BACKOFF_S`;
-- trigger one manual refresh via `kb.ingest.filesystem` for the problematic root.
+- trigger one manual refresh via `kb.ingest.filesystem` for the problematic root;
+- if cycles show `created=0` and `updated=0` while graph coverage is low, this is expected for unchanged files under checksum mode;
+- run controlled backfill/reindex operations (or workspace rebuild) when graph coverage must be restored.
 
 ### Postgres metadata errors
 

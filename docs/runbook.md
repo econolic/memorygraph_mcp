@@ -20,6 +20,7 @@ Use this runbook for live incidents and recovery actions.
 6. Verify startup auto-sync:
    - `auto_ingest_started` appears in logs after restart.
    - `auto_ingest_cycle` appears with `failed_roots=0`.
+   - if `created=0` and `updated=0`, confirm whether source files were actually changed.
 7. Verify graph signal quality for structural queries:
    - `kb.search.debug.graph_seed_count > 0`
    - `kb.search.debug.graph_nonzero=true` (for most relation-impact queries)
@@ -96,6 +97,16 @@ Use this runbook for live incidents and recovery actions.
   5. Tune `KB_AUTO_INGEST_FULL_INTERVAL_CYCLES`, `KB_AUTO_INGEST_GIT_SINCE_REF`, retry/backoff envs.
   6. Run one manual `kb.ingest.filesystem` call for affected root.
   7. If needed, restart MCP and confirm new startup cycle logs.
+
+### Graph lags behind metadata despite healthy auto-ingest
+
+- Symptom: `auto_ingest_cycle` is healthy (`failed_roots=0`) but graph coverage is low for workspace.
+- Actions:
+  1. Compare metadata docs count vs graph docs count for the workspace.
+  2. Confirm cycles are checksum-skipping unchanged files (`created=0`, `updated=0`).
+  3. Validate retrieval with relation-impact queries (`graph_nonzero_rate` on control suite).
+  4. If coverage remains low, schedule controlled reindex/backfill procedure.
+  5. Treat relation-heavy answers as degraded until coverage is restored.
 
 ## Persistence Recovery
 
