@@ -64,7 +64,7 @@ Source reports:
 - Go / No-go: **Go**
 - Required follow-ups:
   - Add larger multilingual benchmark slice (RU+EN) to validate cross-lingual retrieval at 300+ queries.
-  - Add CI step to publish benchmark diff against previous release.
+  - Calibrate benchmark-diff CI thresholds after first 3 PR runs with real variance.
 
 ## Benchmark Commands
 

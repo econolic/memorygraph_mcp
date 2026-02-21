@@ -60,8 +60,9 @@ Key variables:
 
 - Transport/auth:
   - `KB_HTTP_HOST`, `KB_HTTP_PORT`
-  - `KB_AUTH_MODE=dual|strict`
+  - `KB_AUTH_MODE=dual|strict|strict_oauth`
   - `KB_JWT_SECRET`, `KB_JWT_ALGORITHM`
+  - `KB_OAUTH_ISSUER_URL`, `KB_OAUTH_AUDIENCE`, `KB_OAUTH_JWKS_URL`, `KB_OAUTH_REQUIRED_SCOPES`
   - `KB_TRANSPORT_SECURITY_ENABLED`
   - `KB_TRANSPORT_ALLOWED_HOSTS`
   - `KB_TRANSPORT_ALLOWED_ORIGINS`
@@ -94,6 +95,10 @@ Key variables:
   - `KB_AUTO_INGEST_ACL_SUBJECT=<subject>`
   - `KB_AUTO_INGEST_INTERVAL_S=<seconds>`
   - `KB_AUTO_INGEST_RUN_ON_START=true|false`
+  - `KB_AUTO_INGEST_FULL_INTERVAL_CYCLES=<N>`
+  - `KB_AUTO_INGEST_GIT_SINCE_REF=<git ref>`
+  - `KB_AUTO_INGEST_RETRY_ATTEMPTS=<N>`
+  - `KB_AUTO_INGEST_RETRY_BACKOFF_S=<seconds>`
 - Observability:
   - `KB_OTEL_ENABLED=true|false`
   - `KB_OTEL_EXPORTER_OTLP_ENDPOINT`
@@ -109,11 +114,16 @@ Default auto-ingest profile:
 - `KB_AUTO_INGEST_ACL_SUBJECT=u1`
 - `KB_AUTO_INGEST_INTERVAL_S=900`
 - `KB_AUTO_INGEST_RUN_ON_START=true`
+- `KB_AUTO_INGEST_FULL_INTERVAL_CYCLES=8`
+- `KB_AUTO_INGEST_GIT_SINCE_REF=HEAD~1`
+- `KB_AUTO_INGEST_RETRY_ATTEMPTS=3`
+- `KB_AUTO_INGEST_RETRY_BACKOFF_S=1.5`
 
 Security recommendation for HTTP runtime:
 
-- use `KB_AUTH_MODE=strict`;
-- set strong `KB_JWT_SECRET`;
+- use `KB_AUTH_MODE=strict` (JWT) or `KB_AUTH_MODE=strict_oauth` (OIDC/JWKS);
+- for `strict`: set strong `KB_JWT_SECRET`;
+- for `strict_oauth`: set `KB_OAUTH_ISSUER_URL`, `KB_OAUTH_JWKS_URL`, `KB_OAUTH_AUDIENCE`;
 - keep Host/Origin allowlists constrained to trusted local endpoints.
 - keep `KB_GRAPH_ENFORCE_OBJECT_ACL=true` for production.
 
@@ -314,8 +324,12 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO <user>;
 - `strict`:
   - HTTP requests without valid bearer are rejected;
   - recommended default for all new deployments.
+- `strict_oauth`:
+  - HTTP requests require `Authorization: Bearer ...`;
+  - bearer tokens are validated via OIDC issuer + JWKS and optional required scopes;
+  - use for enterprise SSO / IdP-managed access tokens.
 
-### 9.2 JWT requirements
+### 9.2 JWT / OIDC token claims requirements
 
 Required claims:
 
@@ -325,6 +339,10 @@ Required claims:
 Optional:
 
 - `roles` (list)
+
+OIDC scope check:
+
+- if `KB_OAUTH_REQUIRED_SCOPES` is set, all listed scopes must be present in token `scope`/`scp`.
 
 ### 9.3 Transport protections
 
@@ -356,7 +374,7 @@ Use JSON-RPC over POST to `/mcp` with:
 
 - `Content-Type: application/json`
 - `Accept: application/json, text/event-stream`
-- `Authorization: Bearer <jwt>` in strict mode
+- `Authorization: Bearer <token>` in strict/strict_oauth modes
 
 Minimal `tools/call` example (`kb.memory.search`):
 
@@ -432,13 +450,19 @@ Gates enforced by script:
 
 Record final values in `docs/kpi_report.md` using `docs/kpi_report_template.md`.
 
+CI benchmark diff:
+
+- workflow: `.github/workflows/benchmark.yml`
+- runs base/head benchmark comparison and fails PR on metric regressions.
+
 ## 14. Troubleshooting
 
 ### Auth failures (`missing_bearer_token`, `invalid_bearer_token`)
 
 - check `KB_AUTH_MODE`;
-- verify `Authorization: Bearer <jwt>` header;
-- verify JWT secret/algorithm/claims (`sub`, `workspace_id`).
+- verify `Authorization: Bearer <token>` header;
+- for `strict`: verify JWT secret/algorithm/claims (`sub`, `workspace_id`);
+- for `strict_oauth`: verify `KB_OAUTH_ISSUER_URL`, `KB_OAUTH_JWKS_URL`, `KB_OAUTH_AUDIENCE`, scopes.
 
 ### Neo4j degradation / fallback to vector
 
@@ -452,6 +476,8 @@ Record final values in `docs/kpi_report.md` using `docs/kpi_report_template.md`.
 - verify `KB_AUTO_INGEST_ROOTS` paths exist inside runtime (container path, not host path);
 - check logs for `auto_ingest_started` and `auto_ingest_cycle`;
 - if `failed_roots > 0`, inspect `auto_ingest_root_failed` entries and fix path/permissions;
+- inspect `auto_ingest.root_failure` metrics and `auto_ingest_retry` logs for root cause classes;
+- tune `KB_AUTO_INGEST_FULL_INTERVAL_CYCLES`, `KB_AUTO_INGEST_RETRY_ATTEMPTS`, `KB_AUTO_INGEST_RETRY_BACKOFF_S`;
 - trigger one manual refresh via `kb.ingest.filesystem` for the problematic root.
 
 ### Postgres metadata errors

@@ -39,7 +39,7 @@
 
 - ACL leakage incidents (P0):
 - Audit coverage:
-- Auth mode tested (`dual|strict`):
+- Auth mode tested (`dual|strict|strict_oauth`):
 - Identity source distribution (`authorization_header|payload_jwt|legacy_acl`):
 
 ## Operational Sync

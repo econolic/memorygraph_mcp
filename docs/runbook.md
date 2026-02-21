@@ -43,10 +43,11 @@ Use this runbook for live incidents and recovery actions.
 
 - Symptom: `missing_bearer_token` / `invalid_bearer_token`.
 - Actions:
-  1. Ensure request has `Authorization: Bearer <jwt>`.
+  1. Ensure request has `Authorization: Bearer <token>`.
   2. Verify JWT has `sub` and `workspace_id`.
-  3. Verify `KB_JWT_SECRET` and algorithm match issuer.
-  4. If needed during migration, switch to `KB_AUTH_MODE=dual` temporarily.
+  3. If `KB_AUTH_MODE=strict`, verify `KB_JWT_SECRET` and algorithm match issuer.
+  4. If `KB_AUTH_MODE=strict_oauth`, verify `KB_OAUTH_ISSUER_URL`, `KB_OAUTH_JWKS_URL`, `KB_OAUTH_AUDIENCE`, and required scopes.
+  5. If needed during migration, switch to `KB_AUTH_MODE=dual` temporarily.
 
 ### ACL denies expected reads
 
@@ -90,8 +91,10 @@ Use this runbook for live incidents and recovery actions.
   1. Check `KB_AUTO_INGEST_ENABLED`, `KB_AUTO_INGEST_ROOTS`, `KB_AUTO_INGEST_INTERVAL_S`.
   2. Validate root paths from runtime perspective (container vs host paths).
   3. Check logs for `auto_ingest_cycle` and `auto_ingest_root_failed`.
-  4. Run one manual `kb.ingest.filesystem` call for affected root.
-  5. If needed, restart MCP and confirm new startup cycle logs.
+  4. Check retry signals: `auto_ingest_retry` logs and metric `kb_auto_ingest_root_failures_total`.
+  5. Tune `KB_AUTO_INGEST_FULL_INTERVAL_CYCLES`, `KB_AUTO_INGEST_GIT_SINCE_REF`, retry/backoff envs.
+  6. Run one manual `kb.ingest.filesystem` call for affected root.
+  7. If needed, restart MCP and confirm new startup cycle logs.
 
 ## Persistence Recovery
 

@@ -102,7 +102,7 @@ class IngestionPipeline:
         acl_allow: list[str],
         changed_files: list[str] | None = None,
     ) -> dict[str, int]:
-        changed_set = {str(Path(path).resolve()) for path in changed_files} if changed_files else None
+        changed_set = None if changed_files is None else {str(Path(path).resolve()) for path in changed_files}
         docs = self._filesystem.read_documents(root, include_paths=changed_set)
         created = 0
         updated = 0

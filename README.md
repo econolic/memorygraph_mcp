@@ -72,9 +72,10 @@ docker compose up -d --build
 
 ## Security Notes
 
-- Use `KB_AUTH_MODE=strict` for new deployments.
+- Use `KB_AUTH_MODE=strict` for JWT deployments, or `KB_AUTH_MODE=strict_oauth` for OIDC/JWKS deployments.
 - In `dual` mode precedence is:
   - `Authorization` header -> `payload.jwt_bearer` -> legacy payload ACL.
+- In `strict_oauth` mode, HTTP requests require `Authorization: Bearer ...`; token is validated against OIDC JWKS.
 - HTTP transport supports Host/Origin restrictions via `KB_TRANSPORT_ALLOWED_HOSTS` and `KB_TRANSPORT_ALLOWED_ORIGINS`.
 - Graph retrieval enforces object ACL by default (`KB_GRAPH_ENFORCE_OBJECT_ACL=true`).
 
@@ -97,6 +98,13 @@ docker compose up -d --build
 - Optional observability exporters:
   - `KB_OTEL_ENABLED=true` + `KB_OTEL_EXPORTER_OTLP_*`
   - `KB_PROMETHEUS_ENABLED=true` + `KB_PROMETHEUS_PORT=9464`
+- Optional strict OAuth settings:
+  - `KB_OAUTH_ISSUER_URL`, `KB_OAUTH_AUDIENCE`, `KB_OAUTH_JWKS_URL`, `KB_OAUTH_REQUIRED_SCOPES`
+- Auto-ingest hardening controls:
+  - `KB_AUTO_INGEST_FULL_INTERVAL_CYCLES`
+  - `KB_AUTO_INGEST_GIT_SINCE_REF`
+  - `KB_AUTO_INGEST_RETRY_ATTEMPTS`
+  - `KB_AUTO_INGEST_RETRY_BACKOFF_S`
 
 ## Benchmark Commands
 

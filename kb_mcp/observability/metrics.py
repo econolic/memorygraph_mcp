@@ -32,6 +32,8 @@ class MetricsRegistry:
         self._retrieval_stage_latency = None
         self._auto_ingest_cycles = None
         self._auto_ingest_failures = None
+        self._auto_ingest_retried_roots = None
+        self._auto_ingest_root_failures = None
 
         if self._prometheus_enabled:
             self._tool_calls = Counter(
@@ -63,6 +65,17 @@ class MetricsRegistry:
                 "Auto-ingest failed roots count",
                 registry=self._prom_registry,
             )
+            self._auto_ingest_retried_roots = Counter(
+                "kb_auto_ingest_retried_roots_total",
+                "Auto-ingest roots that required retries",
+                registry=self._prom_registry,
+            )
+            self._auto_ingest_root_failures = Counter(
+                "kb_auto_ingest_root_failures_total",
+                "Auto-ingest root failures by reason/method/error kind",
+                ["reason", "method", "error_kind"],
+                registry=self._prom_registry,
+            )
 
     @property
     def prometheus_registry(self) -> object | None:
@@ -91,6 +104,21 @@ class MetricsRegistry:
 
         if key == "auto_ingest.failed_roots" and self._auto_ingest_failures is not None:
             self._auto_ingest_failures.inc(n)
+            return
+
+        if key == "auto_ingest.retried_roots" and self._auto_ingest_retried_roots is not None:
+            self._auto_ingest_retried_roots.inc(n)
+            return
+
+        if key == "auto_ingest.root_failure" and self._auto_ingest_root_failures is not None:
+            reason = labels.get("reason", "unknown")
+            method = labels.get("method", "unknown")
+            error_kind = labels.get("error_kind", "unknown")
+            self._auto_ingest_root_failures.labels(
+                reason=reason,
+                method=method,
+                error_kind=error_kind,
+            ).inc(n)
 
     def observe(self, key: str, value_ms: float, *, labels: dict[str, str] | None = None) -> None:
         self.timers_ms[key].append(float(value_ms))

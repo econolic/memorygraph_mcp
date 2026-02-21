@@ -3,7 +3,7 @@
   "description": "Runtime policy for MCP tool orchestration in Hybrid KB MCP.",
   "decision_schema": {
     "intent": "fact_lookup|relation_impact|explainability|memory_context|memory_delete",
-    "auth_mode": "dual|strict",
+    "auth_mode": "dual|strict|strict_oauth",
     "identity_source": "authorization_header|payload_jwt|legacy_acl|anonymous",
     "tools": [
       {

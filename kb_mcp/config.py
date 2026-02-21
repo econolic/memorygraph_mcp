@@ -31,6 +31,10 @@ class AppConfig:
 
     jwt_secret: str = "change-me"
     jwt_algorithms: tuple[str, ...] = ("HS256",)
+    oauth_issuer_url: str = ""
+    oauth_audience: str = ""
+    oauth_jwks_url: str = ""
+    oauth_required_scopes: tuple[str, ...] = ()
 
     embedding_provider: str = "local"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
@@ -79,6 +83,10 @@ class AppConfig:
     auto_ingest_acl_subject: str = "u1"
     auto_ingest_interval_s: int = 900
     auto_ingest_run_on_start: bool = True
+    auto_ingest_full_interval_cycles: int = 8
+    auto_ingest_git_since_ref: str = "HEAD~1"
+    auto_ingest_retry_attempts: int = 3
+    auto_ingest_retry_backoff_s: float = 1.5
 
     vector_timeout_s: float = 1.0
     graph_timeout_s: float = 1.0
@@ -129,6 +137,14 @@ class AppConfig:
             neo4j_database=getenv("KB_NEO4J_DATABASE", "neo4j"),
             jwt_secret=getenv("KB_JWT_SECRET", "change-me"),
             jwt_algorithms=(getenv("KB_JWT_ALGORITHM", "HS256"),),
+            oauth_issuer_url=getenv("KB_OAUTH_ISSUER_URL", ""),
+            oauth_audience=getenv("KB_OAUTH_AUDIENCE", ""),
+            oauth_jwks_url=getenv("KB_OAUTH_JWKS_URL", ""),
+            oauth_required_scopes=tuple(
+                scope.strip()
+                for scope in getenv("KB_OAUTH_REQUIRED_SCOPES", "").split(",")
+                if scope.strip()
+            ),
             embedding_provider=getenv("KB_EMBEDDING_PROVIDER", "local"),
             embedding_model=getenv("KB_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
             embedding_model_revision=getenv("KB_EMBEDDING_MODEL_REVISION", ""),
@@ -173,6 +189,10 @@ class AppConfig:
             auto_ingest_acl_subject=getenv("KB_AUTO_INGEST_ACL_SUBJECT", "u1"),
             auto_ingest_interval_s=int(getenv("KB_AUTO_INGEST_INTERVAL_S", "900")),
             auto_ingest_run_on_start=getenv("KB_AUTO_INGEST_RUN_ON_START", "true").lower() == "true",
+            auto_ingest_full_interval_cycles=max(1, int(getenv("KB_AUTO_INGEST_FULL_INTERVAL_CYCLES", "8"))),
+            auto_ingest_git_since_ref=getenv("KB_AUTO_INGEST_GIT_SINCE_REF", "HEAD~1"),
+            auto_ingest_retry_attempts=max(1, int(getenv("KB_AUTO_INGEST_RETRY_ATTEMPTS", "3"))),
+            auto_ingest_retry_backoff_s=max(0.1, float(getenv("KB_AUTO_INGEST_RETRY_BACKOFF_S", "1.5"))),
             vector_timeout_s=float(getenv("KB_VECTOR_TIMEOUT_S", "1.0")),
             graph_timeout_s=float(getenv("KB_GRAPH_TIMEOUT_S", "1.0")),
             rerank_timeout_s=float(getenv("KB_RERANK_TIMEOUT_S", "2.0")),

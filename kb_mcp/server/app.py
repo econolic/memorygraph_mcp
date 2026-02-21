@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from time import perf_counter
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import AnyHttpUrl
 
 from kb_mcp.bootstrap import AppDeps, build_deps
 from kb_mcp.observability.tracing import ensure_request_id, start_span
@@ -96,6 +98,15 @@ def _normalize_datetime_utc(value: object) -> str | None:
     return dt.astimezone(timezone.utc).isoformat()
 
 
+def _resource_server_url(*, host: str, port: int) -> str:
+    normalized = host.strip() or "127.0.0.1"
+    if normalized in {"0.0.0.0", "::"}:
+        normalized = "127.0.0.1"
+    if ":" in normalized and not normalized.startswith("["):
+        normalized = f"[{normalized}]"
+    return f"http://{normalized}:{port}"
+
+
 def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
     deps = deps or build_deps()
     cfg = deps.config
@@ -118,13 +129,32 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
             allowed_origins=allowed_origins,
         )
 
+    token_verifier = None
+    auth_settings = None
+    if cfg.auth_mode == "strict_oauth":
+        token_verifier = deps.auth.oauth_token_verifier()
+        if token_verifier is None:
+            raise ValueError(
+                "strict_oauth requires KB_OAUTH_ISSUER_URL and KB_OAUTH_JWKS_URL to be configured"
+            )
+        auth_settings = AuthSettings(
+            issuer_url=cast(AnyHttpUrl, cfg.oauth_issuer_url),
+            resource_server_url=cast(
+                AnyHttpUrl,
+                _resource_server_url(host=cfg.http_host, port=cfg.http_port),
+            ),
+            required_scopes=list(cfg.oauth_required_scopes) or None,
+        )
+
     mcp = FastMCP(
         cfg.service_name,
+        token_verifier=token_verifier,
         stateless_http=True,
         json_response=True,
         host=cfg.http_host,
         port=cfg.http_port,
         streamable_http_path="/mcp",
+        auth=auth_settings,
         transport_security=transport_security,
     )
     router = QueryRouter()
