@@ -14,6 +14,12 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
   - `KB_FUSION_MODE=linear|rrf`
   - `KB_CHUNKING_MODE=char|sentence`
   - `KB_GRAPH_ENFORCE_OBJECT_ACL=true|false`
+- Embeddings and entity extraction quality controls:
+  - `KB_EMBEDDING_BATCH_SIZE`
+  - `KB_EMBEDDING_MODEL_REVISION`
+  - `KB_EMBEDDING_CACHE_ENABLED`
+  - `KB_EMBEDDING_CACHE_MAX_ITEMS`
+  - `KB_ENTITY_EXTRACTION_*`
 - Default auto-ingest loop (enabled by default):
   - `KB_AUTO_INGEST_ENABLED=true`
   - `KB_AUTO_INGEST_ROOTS=/app/.kb_mcp/project_sync,./kb_mcp`
@@ -84,6 +90,13 @@ docker compose up -d --build
   - `debug.filters_effective`
   - `debug.graph_acl_enforced`
   - `debug.fusion_mode`
+  - `debug.graph_seed_count`
+  - `debug.graph_node_count`
+  - `debug.graph_chunk_bonus_count`
+  - `debug.graph_nonzero`
+- Optional observability exporters:
+  - `KB_OTEL_ENABLED=true` + `KB_OTEL_EXPORTER_OTLP_*`
+  - `KB_PROMETHEUS_ENABLED=true` + `KB_PROMETHEUS_PORT=9464`
 
 ## Benchmark Commands
 

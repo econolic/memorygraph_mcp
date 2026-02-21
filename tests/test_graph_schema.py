@@ -36,3 +36,40 @@ def test_ingestion_creates_document_chunk_entity_edges(tmp_path: Path) -> None:
     rels = {edge.rel for edge in edges}
     assert "MENTIONS" in rels
     assert "DOCUMENTED_IN" in rels
+
+
+def test_ingestion_merges_entity_aliases_and_domain_relations(tmp_path: Path) -> None:
+    metadata = MetadataStore()
+    graph = InMemoryGraphStore()
+    pipeline = IngestionPipeline(
+        vector_store=InMemoryVectorStore(),
+        graph_store=graph,
+        metadata=metadata,
+        filesystem=FilesystemConnector(),
+    )
+
+    file_path = tmp_path / "doc.md"
+    file_path.write_text(
+        "Alpha Beta ServiceA depends on ServiceB.\nserviceA depends on ServiceB again.",
+        encoding="utf-8",
+    )
+    result = pipeline.ingest_filesystem(root=str(tmp_path), workspace_id="w1", acl_allow=["u1"])
+    assert result["created"] == 1
+
+    entity = metadata.get_entity("kb://entity/symbol:servicea")
+    assert isinstance(entity, dict)
+    aliases = entity.get("aliases", [])
+    assert isinstance(aliases, list)
+    assert "ServiceA" in aliases
+    assert "serviceA" in aliases
+
+    seeds = graph.resolve_entities(query="ServiceA", filters={"workspace_id": "w1", "acl_subject": "u1"})
+    assert seeds
+    _nodes, edges = graph.expand(
+        seed_uris=seeds,
+        depth=2,
+        edge_types=[],
+        max_nodes=200,
+        filters={"workspace_id": "w1", "acl_subject": "u1"},
+    )
+    assert any(edge.rel == "DEPENDS_ON" for edge in edges)

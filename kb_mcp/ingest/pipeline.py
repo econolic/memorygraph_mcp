@@ -7,7 +7,13 @@ from pathlib import Path
 from kb_mcp.ingest.chunking import chunk_text
 from kb_mcp.ingest.connectors.filesystem import FilesystemConnector
 from kb_mcp.ingest.connectors.git import GitConnector
-from kb_mcp.ingest.entity_extract import entity_display_name, extract_entities, extract_entity_relations
+from kb_mcp.ingest.entity_extract import (
+    EntityExtractionConfig,
+    entity_display_name,
+    extract_entities,
+    extract_entity_aliases,
+    extract_entity_relations,
+)
 from kb_mcp.retrieval.graph_store import GraphStore
 from kb_mcp.retrieval.vector_store import VectorStore
 from kb_mcp.storage.metadata_store import MetadataRepository
@@ -23,6 +29,8 @@ class IngestionPipeline:
         filesystem: FilesystemConnector,
         git: GitConnector | None = None,
         chunking_mode: str = "char",
+        entity_config: EntityExtractionConfig | None = None,
+        embedding_model_info: dict[str, str] | None = None,
     ) -> None:
         self._vector = vector_store
         self._graph = graph_store
@@ -30,6 +38,22 @@ class IngestionPipeline:
         self._filesystem = filesystem
         self._git = git or GitConnector()
         self._chunking_mode = chunking_mode
+        self._entity_cfg = entity_config or EntityExtractionConfig()
+        self._embedding_model_info = embedding_model_info or {}
+
+    @staticmethod
+    def _merge_aliases(existing: object, incoming: list[str]) -> list[str]:
+        aliases: list[str] = []
+        if isinstance(existing, list):
+            for alias in existing:
+                value = str(alias).strip()
+                if value and value not in aliases:
+                    aliases.append(value)
+        for alias in incoming:
+            value = str(alias).strip()
+            if value and value not in aliases:
+                aliases.append(value)
+        return aliases
 
     @staticmethod
     def _checksum(text: str) -> str:
@@ -121,9 +145,21 @@ class IngestionPipeline:
                 chunk_uri = f"kb://chunk/{chunk_id}"
                 new_chunk_uris.add(chunk_uri)
                 chunk_text_value = str(chunk["text"])
-                entity_uris = extract_entities(chunk_text_value)
-                entity_names = {entity_uri: entity_display_name(entity_uri) for entity_uri in entity_uris}
-                for entity_uri, entity_name in entity_names.items():
+                entity_uris = extract_entities(chunk_text_value, cfg=self._entity_cfg)
+                entity_aliases = extract_entity_aliases(chunk_text_value, cfg=self._entity_cfg)
+                entity_names = {}
+                for entity_uri in entity_uris:
+                    raw_aliases = entity_aliases.get(entity_uri, [])
+                    display_name = raw_aliases[0] if raw_aliases else entity_display_name(entity_uri)
+                    existing = self._metadata.get_entity(entity_uri) or {}
+                    merged_aliases = self._merge_aliases(
+                        existing.get("aliases", []),
+                        [display_name, *raw_aliases, entity_display_name(entity_uri)],
+                    )
+                    canonical_key = str(existing.get("canonical_key", "")).strip() or entity_uri.split(
+                        "kb://entity/"
+                    )[-1]
+                    entity_names[entity_uri] = str(existing.get("name", "")).strip() or display_name
                     self._metadata.put_entity(
                         entity_uri,
                         {
@@ -131,9 +167,9 @@ class IngestionPipeline:
                             "workspace_id": workspace_id,
                             "acl_allow": acl_allow,
                             "type": "Entity",
-                            "name": entity_name,
-                            "aliases": [entity_name],
-                            "canonical_key": entity_uri.split("kb://entity/")[-1],
+                            "name": entity_names[entity_uri],
+                            "aliases": merged_aliases,
+                            "canonical_key": canonical_key,
                         },
                     )
                 chunk_payload: dict[str, object] = {
@@ -146,6 +182,9 @@ class IngestionPipeline:
                     "entity_uris": entity_uris,
                     "updated_at": now_iso,
                     "text": chunk_text_value,
+                    "embedding_provider": str(self._embedding_model_info.get("provider", "")),
+                    "embedding_model": str(self._embedding_model_info.get("model", "")),
+                    "embedding_revision": str(self._embedding_model_info.get("revision", "")),
                 }
                 self._vector.upsert_chunk(chunk_id=chunk_id, text=chunk_text_value, payload=chunk_payload)
                 self._metadata.put_chunk(
@@ -162,6 +201,9 @@ class IngestionPipeline:
                         "source_path": source_path,
                         "tags": tags,
                         "updated_at": now_iso,
+                        "embedding_provider": str(self._embedding_model_info.get("provider", "")),
+                        "embedding_model": str(self._embedding_model_info.get("model", "")),
+                        "embedding_revision": str(self._embedding_model_info.get("revision", "")),
                     },
                 )
                 self._graph.upsert_mentions(
@@ -173,7 +215,7 @@ class IngestionPipeline:
                     acl_allow=acl_allow,
                 )
                 self._graph.upsert_entity_relations(
-                    relations=extract_entity_relations(chunk_text_value, entity_uris),
+                    relations=extract_entity_relations(chunk_text_value, entity_uris, cfg=self._entity_cfg),
                     workspace_id=workspace_id,
                     acl_allow=acl_allow,
                 )

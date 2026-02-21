@@ -20,6 +20,12 @@ Use this runbook for live incidents and recovery actions.
 6. Verify startup auto-sync:
    - `auto_ingest_started` appears in logs after restart.
    - `auto_ingest_cycle` appears with `failed_roots=0`.
+7. Verify graph signal quality for structural queries:
+   - `kb.search.debug.graph_seed_count > 0`
+   - `kb.search.debug.graph_nonzero=true` (for most relation-impact queries)
+8. If enabled, verify metrics/traces:
+   - Prometheus endpoint responds (`/metrics` on configured port)
+   - traces appear in configured OTLP backend.
 
 ## Common Incidents
 
@@ -31,6 +37,7 @@ Use this runbook for live incidents and recovery actions.
   2. Check Neo4j container/service health.
   3. Re-run search and confirm fallback is cleared.
   4. Confirm `kb.search.debug.graph_acl_enforced=true` unless explicitly disabled.
+  5. Confirm `kb.search.debug.graph_seed_count` and `kb.search.debug.graph_nonzero` recover.
 
 ### Strict mode auth rejects calls
 
@@ -74,6 +81,7 @@ Use this runbook for live incidents and recovery actions.
   2. Compare no-rerank vs rerank reports.
   3. Verify ingestion freshness and stale chunk cleanup.
   4. Compare filtered subset metrics (`filtered_recall_at_10`, `filtered_ndcg_at_10`).
+  5. Inspect `graph_nonzero_rate` for structural-query regressions.
 
 ### Auto-ingest lag or stopped updates
 

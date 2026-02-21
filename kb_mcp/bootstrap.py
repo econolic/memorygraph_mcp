@@ -11,11 +11,13 @@ from kb_mcp.ingest.embeddings import (
 )
 from kb_mcp.ingest.connectors.filesystem import FilesystemConnector
 from kb_mcp.ingest.connectors.git import GitConnector
+from kb_mcp.ingest.entity_extract import EntityExtractionConfig
 from kb_mcp.ingest.pipeline import IngestionPipeline
 from kb_mcp.memory.service import MemoryService
 from kb_mcp.memory.validator import MemoryFactValidator
 from kb_mcp.observability.audit import AuditLogger
 from kb_mcp.observability.metrics import MetricsRegistry
+from kb_mcp.observability.tracing import setup_tracing
 from kb_mcp.retrieval.evidence import EvidenceBuilder
 from kb_mcp.retrieval.graph_store import GraphStore
 from kb_mcp.retrieval.hybrid import HybridRetriever
@@ -52,13 +54,23 @@ class AppDeps:
 def _create_embedder(cfg: AppConfig) -> Embedder:
     fallback = DeterministicFallbackEmbedder(dimensions=cfg.embedding_dimensions)
     if cfg.embedding_provider == "local":
-        return LocalSentenceTransformerEmbedder(model_name=cfg.embedding_model, fallback=fallback)
+        return LocalSentenceTransformerEmbedder(
+            model_name=cfg.embedding_model,
+            model_revision=cfg.embedding_model_revision,
+            batch_size=cfg.embedding_batch_size,
+            cache_enabled=cfg.embedding_cache_enabled,
+            cache_max_items=cfg.embedding_cache_max_items,
+            fallback=fallback,
+        )
     if cfg.embedding_provider == "openai_compatible":
         return OpenAICompatibleEmbedder(
             base_url=cfg.embedding_base_url,
             api_key=cfg.embedding_api_key,
             model=cfg.embedding_model,
             dimensions=cfg.embedding_dimensions,
+            batch_size=cfg.embedding_batch_size,
+            cache_enabled=cfg.embedding_cache_enabled,
+            cache_max_items=cfg.embedding_cache_max_items,
             fallback=fallback,
         )
     return fallback
@@ -100,6 +112,7 @@ def _create_metadata_store(cfg: AppConfig) -> MetadataRepository:
 
 def build_deps(cfg: AppConfig | None = None) -> AppDeps:
     cfg = cfg or AppConfig.from_env()
+    setup_tracing(cfg)
 
     embedder = _create_embedder(cfg)
     metadata = _create_metadata_store(cfg)
@@ -132,8 +145,21 @@ def build_deps(cfg: AppConfig | None = None) -> AppDeps:
         filesystem=FilesystemConnector(),
         git=GitConnector(),
         chunking_mode=cfg.chunking_mode,
+        entity_config=EntityExtractionConfig(
+            min_symbol_len=cfg.entity_extraction_min_symbol_len,
+            min_term_len=cfg.entity_extraction_min_term_len,
+            symbol_allow_pattern=cfg.entity_symbol_allow_pattern,
+            table_allow_pattern=cfg.entity_table_allow_pattern,
+            term_allow_pattern=cfg.entity_term_allow_pattern,
+            stopwords=cfg.entity_extraction_stopwords,
+        ),
+        embedding_model_info={
+            "provider": cfg.embedding_provider,
+            "model": cfg.embedding_model,
+            "revision": cfg.embedding_model_revision,
+        },
     )
-    metrics = MetricsRegistry()
+    metrics = MetricsRegistry(prometheus_enabled=cfg.prometheus_enabled)
     audit = AuditLogger()
 
     return AppDeps(

@@ -1,0 +1,5 @@
+{"id":"e1","text":"ServiceA depends on ServiceB for billing checks.","expected_entities":["kb://entity/symbol:servicea","kb://entity/symbol:serviceb"],"expected_relations":[{"src":"kb://entity/symbol:servicea","dst":"kb://entity/symbol:serviceb","rel":"DEPENDS_ON"}]}
+{"id":"e2","text":"PipelineX calls ServiceY before writes to mart.revenue_fact.","expected_entities":["kb://entity/symbol:pipelinex","kb://entity/symbol:servicey","kb://entity/table:mart.revenue_fact"],"expected_relations":[{"src":"kb://entity/symbol:pipelinex","dst":"kb://entity/symbol:servicey","rel":"CALLS"}]}
+{"id":"e3","text":"EntityExtractor implements graph-aware relation extraction.","expected_entities":["kb://entity/symbol:entityextractor"],"expected_relations":[]}
+{"id":"e4","text":"СервисА влияет на СервисБ при перерасчете отчета.","expected_entities":["kb://entity/term:сервиса","kb://entity/term:сервисб"],"expected_relations":[{"src":"kb://entity/term:сервиса","dst":"kb://entity/term:сервисб","rel":"AFFECTS"}]}
+{"id":"e5","text":"Ignore boilerplate: class def import return true false none.","expected_entities":[],"expected_relations":[]}

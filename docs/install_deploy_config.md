@@ -76,7 +76,14 @@ Key variables:
   - `KB_NEO4J_URI`, `KB_NEO4J_USER`, `KB_NEO4J_PASSWORD`, `KB_NEO4J_DATABASE`
 - Embeddings:
   - `KB_EMBEDDING_PROVIDER=local|openai_compatible`
-  - `KB_EMBEDDING_MODEL`, `KB_EMBEDDING_BASE_URL`, `KB_EMBEDDING_API_KEY`, `KB_EMBEDDING_DIMENSIONS`
+  - `KB_EMBEDDING_MODEL`, `KB_EMBEDDING_MODEL_REVISION`
+  - `KB_EMBEDDING_BASE_URL`, `KB_EMBEDDING_API_KEY`, `KB_EMBEDDING_DIMENSIONS`
+  - `KB_EMBEDDING_BATCH_SIZE`
+  - `KB_EMBEDDING_CACHE_ENABLED`, `KB_EMBEDDING_CACHE_MAX_ITEMS`
+- Entity extraction:
+  - `KB_ENTITY_EXTRACTION_MIN_SYMBOL_LEN`, `KB_ENTITY_EXTRACTION_MIN_TERM_LEN`
+  - `KB_ENTITY_SYMBOL_ALLOW_PATTERN`, `KB_ENTITY_TABLE_ALLOW_PATTERN`, `KB_ENTITY_TERM_ALLOW_PATTERN`
+  - `KB_ENTITY_EXTRACTION_STOPWORDS`
 - Retrieval quality/runtime flags:
   - `KB_FUSION_MODE=linear|rrf`
   - `KB_CHUNKING_MODE=char|sentence`
@@ -87,6 +94,12 @@ Key variables:
   - `KB_AUTO_INGEST_ACL_SUBJECT=<subject>`
   - `KB_AUTO_INGEST_INTERVAL_S=<seconds>`
   - `KB_AUTO_INGEST_RUN_ON_START=true|false`
+- Observability:
+  - `KB_OTEL_ENABLED=true|false`
+  - `KB_OTEL_EXPORTER_OTLP_ENDPOINT`
+  - `KB_OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf|grpc`
+  - `KB_PROMETHEUS_ENABLED=true|false`
+  - `KB_PROMETHEUS_PORT=9464`
 
 Default auto-ingest profile:
 
@@ -212,6 +225,10 @@ docker compose up -d --build
 docker compose ps
 docker compose logs -f mcp
 ```
+
+If `KB_PROMETHEUS_ENABLED=true`, metrics are exposed on:
+
+- `http://127.0.0.1:${KB_PROMETHEUS_PORT:-9464}/metrics`
 
 ### 7.3 Verify persistence after restart
 
@@ -366,8 +383,11 @@ curl -sS http://127.0.0.1:8080/mcp \
 3. `kb.search` returns results with citations.
 4. `kb.memory.upsert` -> `kb.memory.search` -> `kb.memory.delete` lifecycle works.
 5. With graph disabled/unavailable, `kb.search` reports vector fallback mode.
-6. `kb.search.debug` includes `filters_effective`, `graph_acl_enforced`, `fusion_mode`.
+6. `kb.search.debug` includes:
+   - `filters_effective`, `graph_acl_enforced`, `fusion_mode`
+   - `graph_seed_count`, `graph_node_count`, `graph_chunk_bonus_count`, `graph_nonzero`
 7. Startup log contains `auto_ingest_started` and one `auto_ingest_cycle`.
+8. If graph is enabled and query has structural intent, `graph_nonzero` should be `true` for most cases.
 
 ### 12.2 Security
 
@@ -400,6 +420,7 @@ Gates enforced by script:
 - `nDCG@10 >= 0.75`
 - `P95 <= 1.5s` (without rerank)
 - `P95 <= 3.5s` (with rerank)
+- `graph_nonzero_rate >= 0.70` (when candidate graph queries in run >= 10)
 
 Record final values in `docs/kpi_report.md` using `docs/kpi_report_template.md`.
 

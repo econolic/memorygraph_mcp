@@ -189,15 +189,16 @@ class InMemoryGraphStore:
         for entity_uri in entity_uris:
             if entity_uri not in self._nodes:
                 canonical = entity_uri.split("/")[-1]
+                alias = entity_names.get(entity_uri, canonical)
                 self._nodes[entity_uri] = GraphNode(
                     uri=entity_uri,
                     type="Entity",
-                    name=entity_names.get(entity_uri, canonical),
+                    name=alias,
                     properties={
                         "workspace_id": workspace_id,
                         "acl_allow": list(acl_allow),
                         "canonical_key": canonical,
-                        "aliases": [entity_names.get(entity_uri, canonical)],
+                        "aliases": [alias],
                     },
                 )
             else:
@@ -205,6 +206,9 @@ class InMemoryGraphStore:
                 props = dict(entity.properties)
                 props["workspace_id"] = workspace_id
                 props["acl_allow"] = self._merge_acl(props.get("acl_allow", []), acl_allow)
+                incoming_alias = entity_names.get(entity_uri, entity.name)
+                props["aliases"] = self._merge_acl(props.get("aliases", []), [incoming_alias])
+                props["canonical_key"] = str(props.get("canonical_key", "")).strip() or entity_uri.split("/")[-1]
                 self._nodes[entity_uri] = GraphNode(
                     uri=entity.uri,
                     type=entity.type,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from time import perf_counter
 from pathlib import Path
 from typing import Protocol
 
@@ -17,6 +18,9 @@ class AutoIngestDeps(Protocol):
 
     @property
     def ingestion(self) -> IngestionPipeline: ...
+
+    @property
+    def metrics(self) -> object: ...
 
 
 class AutoIngestService:
@@ -42,6 +46,7 @@ class AutoIngestService:
         return roots
 
     def run_once(self, *, reason: str) -> dict[str, int]:
+        t0 = perf_counter()
         summary = {
             "created": 0,
             "updated": 0,
@@ -50,6 +55,10 @@ class AutoIngestService:
             "failed_roots": 0,
         }
         if not self._cfg.auto_ingest_enabled:
+            metrics = getattr(self._deps, "metrics", None)
+            if metrics is not None:
+                metrics.inc("auto_ingest.cycle", labels={"reason": reason, "status": "disabled"})
+                metrics.observe("auto_ingest.cycle.latency_ms", (perf_counter() - t0) * 1000.0)
             return summary
 
         for root in self._roots():
@@ -73,6 +82,13 @@ class AutoIngestService:
                 )
 
         logger.info("auto_ingest_cycle", extra={"extra": {"reason": reason, **summary}})
+        metrics = getattr(self._deps, "metrics", None)
+        if metrics is not None:
+            status = "failed" if summary["failed_roots"] > 0 else "ok"
+            metrics.inc("auto_ingest.cycle", labels={"reason": reason, "status": status})
+            if summary["failed_roots"] > 0:
+                metrics.inc("auto_ingest.failed_roots", n=int(summary["failed_roots"]))
+            metrics.observe("auto_ingest.cycle.latency_ms", (perf_counter() - t0) * 1000.0)
         return summary
 
     def _run_loop(self) -> None:

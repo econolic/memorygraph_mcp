@@ -112,6 +112,8 @@ def main() -> int:
     filtered_mrrs: list[float] = []
     filtered_citation_cov: list[float] = []
     filtered_latencies_ms: list[float] = []
+    graph_signal_candidates = 0
+    graph_signal_nonzero = 0
 
     for row in queries:
         qid = str(row["qid"])
@@ -139,6 +141,10 @@ def main() -> int:
             rerank=RerankConfig(enabled=args.rerank, top_n=args.top_k),
         )
         latencies_ms.append((time.perf_counter() - t0) * 1000.0)
+        if _debug.graph_seed_count > 0:
+            graph_signal_candidates += 1
+            if _debug.graph_nonzero:
+                graph_signal_nonzero += 1
 
         ranked_sources: list[str] = []
         cited = 0
@@ -186,6 +192,13 @@ def main() -> int:
             if len(filtered_latencies_ms) > 1
             else (filtered_latencies_ms[0] if filtered_latencies_ms else 0.0)
         ),
+        "graph_signal_candidate_queries": graph_signal_candidates,
+        "graph_signal_nonzero_queries": graph_signal_nonzero,
+        "graph_nonzero_rate": (
+            float(graph_signal_nonzero) / float(graph_signal_candidates)
+            if graph_signal_candidates > 0
+            else 0.0
+        ),
     }
 
     if args.output:
@@ -202,6 +215,8 @@ def main() -> int:
             failures.append("p95_latency_ms > 3500 with rerank")
         if not args.rerank and report["p95_latency_ms"] > 1500:
             failures.append("p95_latency_ms > 1500 without rerank")
+        if report["graph_signal_candidate_queries"] >= 10 and report["graph_nonzero_rate"] < 0.70:
+            failures.append("graph_nonzero_rate < 0.70")
         if failures:
             print(json.dumps({"gate_failures": failures}, ensure_ascii=True, indent=2))
             return 1

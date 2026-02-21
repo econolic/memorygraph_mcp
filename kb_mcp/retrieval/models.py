@@ -39,3 +39,7 @@ class RetrievalDebug:
     fallback_mode: str | None = None
     fallback_reason: str | None = None
     fusion_mode: str = "linear"
+    graph_seed_count: int = 0
+    graph_node_count: int = 0
+    graph_chunk_bonus_count: int = 0
+    graph_nonzero: bool = False

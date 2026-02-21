@@ -34,9 +34,42 @@ class AppConfig:
 
     embedding_provider: str = "local"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_model_revision: str = ""
     embedding_base_url: str = ""
     embedding_api_key: str = ""
     embedding_dimensions: int = 384
+    embedding_batch_size: int = 32
+    embedding_cache_enabled: bool = True
+    embedding_cache_max_items: int = 4096
+    entity_extraction_min_symbol_len: int = 3
+    entity_extraction_min_term_len: int = 3
+    entity_symbol_allow_pattern: str = r"^[A-Za-z_][A-Za-z0-9_]{2,}$"
+    entity_table_allow_pattern: str = r"^[a-z_]+\.[a-z_]+$"
+    entity_term_allow_pattern: str = r"^[А-Яа-яЁё][А-Яа-яЁё0-9_\-]{2,}$"
+    entity_extraction_stopwords: tuple[str, ...] = (
+        "the",
+        "and",
+        "with",
+        "from",
+        "that",
+        "this",
+        "for",
+        "are",
+        "или",
+        "как",
+        "для",
+        "это",
+        "что",
+        "при",
+        "class",
+        "def",
+        "import",
+        "from",
+        "return",
+        "true",
+        "false",
+        "none",
+    )
     fusion_mode: str = "linear"
     chunking_mode: str = "char"
     graph_enforce_object_acl: bool = True
@@ -50,6 +83,11 @@ class AppConfig:
     vector_timeout_s: float = 1.0
     graph_timeout_s: float = 1.0
     rerank_timeout_s: float = 2.0
+    otel_enabled: bool = False
+    otel_exporter_otlp_endpoint: str = ""
+    otel_exporter_otlp_protocol: str = "http/protobuf"
+    prometheus_enabled: bool = False
+    prometheus_port: int = 9464
 
     default_top_k: int = 20
     max_top_k: int = 100
@@ -93,9 +131,35 @@ class AppConfig:
             jwt_algorithms=(getenv("KB_JWT_ALGORITHM", "HS256"),),
             embedding_provider=getenv("KB_EMBEDDING_PROVIDER", "local"),
             embedding_model=getenv("KB_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+            embedding_model_revision=getenv("KB_EMBEDDING_MODEL_REVISION", ""),
             embedding_base_url=getenv("KB_EMBEDDING_BASE_URL", ""),
             embedding_api_key=getenv("KB_EMBEDDING_API_KEY", ""),
             embedding_dimensions=int(getenv("KB_EMBEDDING_DIMENSIONS", "384")),
+            embedding_batch_size=int(getenv("KB_EMBEDDING_BATCH_SIZE", "32")),
+            embedding_cache_enabled=getenv("KB_EMBEDDING_CACHE_ENABLED", "true").lower() == "true",
+            embedding_cache_max_items=int(getenv("KB_EMBEDDING_CACHE_MAX_ITEMS", "4096")),
+            entity_extraction_min_symbol_len=int(getenv("KB_ENTITY_EXTRACTION_MIN_SYMBOL_LEN", "3")),
+            entity_extraction_min_term_len=int(getenv("KB_ENTITY_EXTRACTION_MIN_TERM_LEN", "3")),
+            entity_symbol_allow_pattern=getenv(
+                "KB_ENTITY_SYMBOL_ALLOW_PATTERN",
+                r"^[A-Za-z_][A-Za-z0-9_]{2,}$",
+            ),
+            entity_table_allow_pattern=getenv(
+                "KB_ENTITY_TABLE_ALLOW_PATTERN",
+                r"^[a-z_]+\.[a-z_]+$",
+            ),
+            entity_term_allow_pattern=getenv(
+                "KB_ENTITY_TERM_ALLOW_PATTERN",
+                r"^[А-Яа-яЁё][А-Яа-яЁё0-9_\-]{2,}$",
+            ),
+            entity_extraction_stopwords=tuple(
+                token.strip().lower()
+                for token in getenv(
+                    "KB_ENTITY_EXTRACTION_STOPWORDS",
+                    "the,and,with,from,that,this,for,are,или,как,для,это,что,при,class,def,import,return,true,false,none",
+                ).split(",")
+                if token.strip()
+            ),
             fusion_mode=getenv("KB_FUSION_MODE", "linear"),
             chunking_mode=getenv("KB_CHUNKING_MODE", "char"),
             graph_enforce_object_acl=getenv("KB_GRAPH_ENFORCE_OBJECT_ACL", "true").lower() == "true",
@@ -112,6 +176,11 @@ class AppConfig:
             vector_timeout_s=float(getenv("KB_VECTOR_TIMEOUT_S", "1.0")),
             graph_timeout_s=float(getenv("KB_GRAPH_TIMEOUT_S", "1.0")),
             rerank_timeout_s=float(getenv("KB_RERANK_TIMEOUT_S", "2.0")),
+            otel_enabled=getenv("KB_OTEL_ENABLED", "false").lower() == "true",
+            otel_exporter_otlp_endpoint=getenv("KB_OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+            otel_exporter_otlp_protocol=getenv("KB_OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf"),
+            prometheus_enabled=getenv("KB_PROMETHEUS_ENABLED", "false").lower() == "true",
+            prometheus_port=int(getenv("KB_PROMETHEUS_PORT", "9464")),
             default_top_k=int(getenv("KB_DEFAULT_TOP_K", "20")),
             max_top_k=int(getenv("KB_MAX_TOP_K", "100")),
             default_expand_depth=int(getenv("KB_DEFAULT_EXPAND_DEPTH", "2")),

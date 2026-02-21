@@ -140,6 +140,10 @@ def test_http_bearer_identity_precedence_over_payload_spoof() -> None:
         assert debug.get("graph_acl_enforced") is True
         assert decision_trace.get("fusion_mode") == "linear"
         assert debug.get("fusion_mode") == "linear"
+        assert isinstance(debug.get("graph_seed_count"), int)
+        assert isinstance(debug.get("graph_node_count"), int)
+        assert isinstance(debug.get("graph_chunk_bonus_count"), int)
+        assert isinstance(debug.get("graph_nonzero"), bool)
 
 
 def test_http_resource_acl_denies_foreign_workspace_access(tmp_path: Path) -> None:

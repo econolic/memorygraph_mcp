@@ -27,6 +27,9 @@
 - Filtered citation coverage:
 - Filtered P95 latency without rerank:
 - Filtered P95 latency with rerank:
+- Graph signal candidate queries:
+- Graph signal nonzero queries:
+- Graph nonzero rate:
 
 ## Faithfulness
 

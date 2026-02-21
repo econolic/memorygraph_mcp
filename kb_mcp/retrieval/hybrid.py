@@ -53,9 +53,12 @@ class HybridRetriever:
         fallback_reason: str | None = None
 
         graph_bonus_by_uri: dict[str, float] = {}
+        graph_seed_count = 0
+        graph_node_count = 0
         if depth > 0:
             try:
                 seed_entities = self._graph.resolve_entities(query=query, filters=filters)
+                graph_seed_count = len(seed_entities)
                 nodes, _edges = self._graph.expand(
                     seed_uris=seed_entities,
                     depth=depth,
@@ -63,6 +66,7 @@ class HybridRetriever:
                     max_nodes=max_nodes,
                     filters=filters,
                 )
+                graph_node_count = len(nodes)
                 graph_bonus_by_uri = {n.uri: 1.0 for n in nodes}
             except Exception as exc:  # pragma: no cover - failure path integration-level
                 fallback_mode = "vector"
@@ -98,9 +102,12 @@ class HybridRetriever:
             )
 
         fused: list[RetrievedItem] = []
+        graph_nonzero = False
         for hit in vector_hits:
             uri = f"kb://chunk/{hit.item_id}"
             graph_score = graph_bonus_by_uri.get(uri, 0.0)
+            if graph_score > 0.0:
+                graph_nonzero = True
             memory_score = float(memory_bonus_by_uri.get(uri, 0.0))
             lexical_score = self._lexical_score(query, str(hit.payload.get("text", "")))
             if self._fusion_mode == "rrf":
@@ -149,5 +156,11 @@ class HybridRetriever:
             fallback_mode=fallback_mode,
             fallback_reason=fallback_reason,
             fusion_mode=self._fusion_mode,
+            graph_seed_count=graph_seed_count,
+            graph_node_count=graph_node_count,
+            graph_chunk_bonus_count=sum(
+                1 for uri, score in graph_bonus_by_uri.items() if uri.startswith("kb://chunk/") and score > 0.0
+            ),
+            graph_nonzero=graph_nonzero,
         )
         return reranked[:top_k], debug

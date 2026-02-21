@@ -1,11 +1,33 @@
 from __future__ import annotations
 
+import re
+
 from neo4j import GraphDatabase, RoutingControl
 
 from kb_mcp.retrieval.models import GraphEdge, GraphNode
 
 
 class Neo4jGraphStore:
+    _QUERY_TOKEN_RE = re.compile(r"[A-Za-zА-Яа-яЁё0-9_]{3,}")
+    _QUERY_STOPWORDS = {
+        "the",
+        "and",
+        "with",
+        "from",
+        "that",
+        "this",
+        "for",
+        "are",
+        "как",
+        "или",
+        "для",
+        "это",
+        "что",
+        "при",
+        "mode",
+        "query",
+        "graph",
+    }
     _ALLOWED_REL_TYPES = {
         "CONTAINS",
         "MENTIONS",
@@ -53,6 +75,16 @@ class Neo4jGraphStore:
     def _acl_enforced(filters: dict[str, object]) -> bool:
         return bool(filters.get("graph_enforce_object_acl", True))
 
+    @classmethod
+    def _query_tokens(cls, query: str) -> list[str]:
+        tokens: list[str] = []
+        for token in cls._QUERY_TOKEN_RE.findall(query.lower()):
+            if token in cls._QUERY_STOPWORDS:
+                continue
+            if token not in tokens:
+                tokens.append(token)
+        return tokens
+
     def _relation_pattern(self, edge_types: list[str]) -> str:
         selected = [edge_type for edge_type in edge_types if edge_type in self._ALLOWED_REL_TYPES]
         if not selected:
@@ -63,17 +95,23 @@ class Neo4jGraphStore:
         workspace_id = str(filters.get("workspace_id", ""))
         acl_subjects = self._acl_subjects(filters)
         enforce_acl = self._acl_enforced(filters)
+        tokens = self._query_tokens(query)
         records, _, _ = self._driver.execute_query(
             "MATCH (e:Entity {workspace_id: $workspace_id}) "
             "WHERE ($enforce_acl = false "
             "OR any(sub IN coalesce(e.acl_allow, []) WHERE sub IN $acl_subjects)) "
             "AND (toLower(coalesce(e.name, '')) CONTAINS toLower($q) "
             "OR toLower(coalesce(e.canonical_key, '')) CONTAINS toLower($q) "
-            "OR any(alias IN coalesce(e.aliases, []) WHERE toLower(alias) CONTAINS toLower($q))) "
+            "OR any(alias IN coalesce(e.aliases, []) WHERE toLower(alias) CONTAINS toLower($q)) "
+            "OR any(t IN $tokens WHERE "
+            "toLower(coalesce(e.name, '')) CONTAINS t "
+            "OR toLower(coalesce(e.canonical_key, '')) CONTAINS t "
+            "OR any(alias IN coalesce(e.aliases, []) WHERE toLower(alias) CONTAINS t))) "
             "RETURN e.uri AS uri LIMIT 20",
             parameters_={
                 "workspace_id": workspace_id,
                 "q": query,
+                "tokens": tokens,
                 "acl_subjects": acl_subjects,
                 "enforce_acl": enforce_acl,
             },
@@ -225,7 +263,10 @@ class Neo4jGraphStore:
             "WITH d, c "
             "UNWIND $entities AS ent "
             "MERGE (e:Entity {uri: ent.uri, workspace_id: $workspace_id}) "
-            "SET e.name = ent.name, e.canonical_key = ent.canonical_key, e.aliases = ent.aliases, "
+            "SET e.name = coalesce(e.name, ent.name), "
+            "e.canonical_key = coalesce(e.canonical_key, ent.canonical_key), "
+            "e.aliases = reduce(acc = [], x IN (coalesce(e.aliases, []) + ent.aliases) | "
+            "CASE WHEN x IS NULL OR x IN acc THEN acc ELSE acc + x END), "
             "e.acl_allow = [x IN (coalesce(e.acl_allow, []) + $acl_allow) WHERE x IS NOT NULL] "
             "MERGE (c)-[:MENTIONS]->(e) "
             "MERGE (e)-[:DOCUMENTED_IN]->(d)",

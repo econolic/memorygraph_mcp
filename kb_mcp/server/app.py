@@ -8,7 +8,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from kb_mcp.bootstrap import AppDeps, build_deps
-from kb_mcp.observability.tracing import ensure_request_id
+from kb_mcp.observability.tracing import ensure_request_id, start_span
 from kb_mcp.retrieval.rerank import RerankConfig
 from kb_mcp.retrieval.router import POLICY_VERSION, QueryRouter
 from kb_mcp.security.acl import AccessContext
@@ -192,16 +192,24 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         depth = payload.graph.expand_depth if routed.mode != "vector" else 0
         edge_types = payload.graph.edge_types if routed.mode != "vector" else []
 
-        items, debug = deps.retriever.search(
-            query=payload.query,
-            top_k=min(payload.top_k, cfg.max_top_k),
-            filters=acl_filters,
-            depth=min(depth, cfg.max_expand_depth),
-            edge_types=edge_types,
-            max_nodes=payload.graph.max_nodes,
-            memory_bonus_by_uri=memory_bonus_by_uri,
-            rerank=rerank_cfg,
-        )
+        with start_span(
+            "tool.kb.search",
+            attributes={
+                "tool.name": "kb.search",
+                "workspace_id": search_workspace,
+                "mode": routed.mode,
+            },
+        ):
+            items, debug = deps.retriever.search(
+                query=payload.query,
+                top_k=min(payload.top_k, cfg.max_top_k),
+                filters=acl_filters,
+                depth=min(depth, cfg.max_expand_depth),
+                edge_types=edge_types,
+                max_nodes=payload.graph.max_nodes,
+                memory_bonus_by_uri=memory_bonus_by_uri,
+                rerank=rerank_cfg,
+            )
 
         results: list[SearchResult] = []
         for item in items:
@@ -259,6 +267,10 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
                 },
                 "graph_acl_enforced": cfg.graph_enforce_object_acl,
                 "fusion_mode": debug.fusion_mode,
+                "graph_seed_count": debug.graph_seed_count,
+                "graph_node_count": debug.graph_node_count,
+                "graph_chunk_bonus_count": debug.graph_chunk_bonus_count,
+                "graph_nonzero": debug.graph_nonzero,
                 "deprecated_legacy_acl": auth.deprecated_legacy_acl,
                 "payload_workspace_ignored": payload.workspace_id != auth.ctx.workspace_id,
             },
@@ -266,6 +278,9 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
 
         deps.metrics.inc("tool.kb.search.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
+        deps.metrics.observe("tool.kb.search.latency_ms", latency_ms)
+        for stage, value_ms in debug.latency_ms.items():
+            deps.metrics.observe("retrieval.stage.latency_ms", value_ms, labels={"stage": stage})
         audit_tool(
             auth=auth,
             tool="kb.search",
@@ -301,6 +316,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         )
         deps.metrics.inc("tool.kb.graph_expand.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
+        deps.metrics.observe("tool.kb.graph_expand.latency_ms", latency_ms)
         audit_tool(
             auth=auth,
             tool="kb.graph_expand",
@@ -329,6 +345,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
             explanations.append({"uri": uri, "reasons": reasons})
         deps.metrics.inc("tool.kb.explain.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
+        deps.metrics.observe("tool.kb.explain.latency_ms", latency_ms)
         audit_tool(
             auth=auth,
             tool="kb.explain",
@@ -351,6 +368,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         )
         deps.metrics.inc("tool.kb.memory.upsert.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
+        deps.metrics.observe("tool.kb.memory.upsert.latency_ms", latency_ms)
         audit_tool(
             auth=auth,
             tool="kb.memory.upsert",
@@ -373,6 +391,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         )
         deps.metrics.inc("tool.kb.memory.search.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
+        deps.metrics.observe("tool.kb.memory.search.latency_ms", latency_ms)
         audit_tool(
             auth=auth,
             tool="kb.memory.search",
@@ -400,6 +419,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         )
         deps.metrics.inc("tool.kb.memory.delete.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
+        deps.metrics.observe("tool.kb.memory.delete.latency_ms", latency_ms)
         audit_tool(
             auth=auth,
             tool="kb.memory.delete",
@@ -426,6 +446,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         )
         deps.metrics.inc("tool.kb.ingest.filesystem.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
+        deps.metrics.observe("tool.kb.ingest.filesystem.latency_ms", latency_ms)
         audit_tool(
             auth=auth,
             tool="kb.ingest.filesystem",
@@ -454,6 +475,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         )
         deps.metrics.inc("tool.kb.ingest.git_diff.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
+        deps.metrics.observe("tool.kb.ingest.git_diff.latency_ms", latency_ms)
         audit_tool(
             auth=auth,
             tool="kb.ingest.git_diff",

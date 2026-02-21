@@ -4,6 +4,7 @@ from kb_mcp.bootstrap import build_deps
 from kb_mcp.config import AppConfig
 from kb_mcp.ingest.auto_ingest import AutoIngestService
 from kb_mcp.logging import configure_logging
+from kb_mcp.observability.metrics import start_prometheus_exporter
 from kb_mcp.server.app import create_mcp_server
 
 
@@ -11,6 +12,8 @@ def run_stdio() -> None:
     cfg = AppConfig.from_env()
     configure_logging()
     deps = build_deps(cfg)
+    if cfg.prometheus_enabled and deps.metrics.prometheus_registry is not None:
+        start_prometheus_exporter(port=cfg.prometheus_port, registry=deps.metrics.prometheus_registry)
     auto_ingest = AutoIngestService(deps)
     auto_ingest.start()
     server = create_mcp_server(deps)
