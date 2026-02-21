@@ -92,6 +92,42 @@ docker compose up -d --build
 - HTTP transport supports Host/Origin restrictions via `KB_TRANSPORT_ALLOWED_HOSTS` and `KB_TRANSPORT_ALLOWED_ORIGINS`.
 - Graph retrieval enforces object ACL by default (`KB_GRAPH_ENFORCE_OBJECT_ACL=true`).
 
+## Bearer Token Setup for MCP Clients
+
+If auth mode is `strict` or `strict_oauth`, MCP calls require bearer auth on every request.
+
+Get bearer in `strict` mode (JWT):
+
+```bash
+set -a; source .env; set +a
+TOKEN="$(python3 - <<'PY'
+import os, jwt
+print(jwt.encode({"sub":"u1","workspace_id":"w1","roles":["reader"]}, os.environ["KB_JWT_SECRET"], algorithm="HS256"))
+PY
+)"
+export HYBRID_KB_MCP_AUTH_HEADER="Bearer ${TOKEN}"
+```
+
+Get bearer in `strict_oauth` mode:
+
+- use your IdP/issuer flow to mint access token;
+- then export header value:
+
+```bash
+export HYBRID_KB_MCP_AUTH_HEADER="Bearer <access_token>"
+```
+
+Codex MCP config example (`/root/.codex/config.toml`):
+
+```toml
+[mcp_servers.hybrid_kb_mcp]
+url = "http://127.0.0.1:8080/mcp"
+startup_timeout_sec = 60
+env_http_headers = { Authorization = "HYBRID_KB_MCP_AUTH_HEADER" }
+```
+
+After updating token/config, restart MCP client session.
+
 ## Session and Identity Model
 
 - Identity is resolved from bearer token claims (`sub`, `workspace_id`) in strict modes.

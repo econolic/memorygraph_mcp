@@ -420,9 +420,32 @@ Add to `/root/.codex/config.toml`:
 [mcp_servers.hybrid_kb_mcp]
 url = "http://127.0.0.1:8080/mcp"
 startup_timeout_sec = 60
+env_http_headers = { Authorization = "HYBRID_KB_MCP_AUTH_HEADER" }
 ```
 
 Restart Codex session after updating config.
+
+Bearer setup for Codex:
+
+1. Mint token.
+   - For `KB_AUTH_MODE=strict`: use section `6.2 Create JWT token for strict mode`.
+   - For `KB_AUTH_MODE=strict_oauth`: mint access token from your OIDC issuer (or use section `9.3` local smoke issuer).
+2. Export header value:
+
+```bash
+export HYBRID_KB_MCP_AUTH_HEADER="Bearer <token>"
+```
+
+3. Restart Codex session so MCP server config and env are reloaded.
+
+Optional local-only shortcut (less secure, avoid in shared environments):
+
+```toml
+[mcp_servers.hybrid_kb_mcp]
+url = "http://127.0.0.1:8080/mcp"
+startup_timeout_sec = 60
+http_headers = { Authorization = "Bearer <token>" }
+```
 
 ### 10.2 Generic HTTP MCP client behavior
 
