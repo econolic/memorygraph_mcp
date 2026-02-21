@@ -200,6 +200,26 @@ External DB mode:
 - Qdrant and Neo4j: use native backup/restore of the managed services.
 - Metadata Postgres: use `pg_dump` / `pg_restore`.
 
+## Scalability and Parallel Usage
+
+Current default profile (`docker compose` with local bind mounts) is viable for local/dev and small-team runtime:
+
+- data is persistent on host (`.docker-data/*`);
+- MCP, Qdrant, and Neo4j run as single-host services;
+- good for moderate concurrent read/search traffic.
+
+For larger production-scale and stronger parallel usage, move to shared external services:
+
+- use external/managed Qdrant and Neo4j (clustered/HA topology);
+- use Postgres metadata backend instead of local SQLite;
+- run MCP as stateless replicas behind a load balancer;
+- keep ingestion controlled (single-writer/queue/leader) to avoid write races.
+
+Bottom line:
+
+- current model is operationally valid for small-to-medium deployments;
+- for high-scale multi-tenant workloads, use external DB architecture and horizontal MCP scaling.
+
 ## Benchmark Commands
 
 ```bash
