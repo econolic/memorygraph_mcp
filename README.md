@@ -4,7 +4,7 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
 
 ## What This Project Provides
 
-- MCP tools: `kb.search`, `kb.graph_expand`, `kb.explain`
+- MCP tools: `kb.route`, `kb.search`, `kb.graph_expand`, `kb.explain`
 - Memory tools: `kb.memory.upsert`, `kb.memory.search`, `kb.memory.delete`
 - Ingestion tools: `kb.ingest.filesystem`, `kb.ingest.git_diff`
 - ACL-protected resources: `kb://doc/*`, `kb://chunk/*`, `kb://entity/*`, `kb://memory/*`
@@ -32,6 +32,7 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
 ## Tool Descriptions (User View)
 
 - `kb.search`: find relevant knowledge snippets with citations.
+- `kb.route`: return intent + recommended tools + execution plan (no client-side guessing).
 - `kb.graph_expand`: show entity relations, dependency chains, and impact paths.
 - `kb.explain`: explain why retrieved results are relevant.
 - `kb.memory.upsert`: save confirmed facts/decisions/preferences for a user/workspace.
@@ -82,6 +83,30 @@ docker compose up -d --build
 
 - HTTP MCP: `http://127.0.0.1:8080/mcp`
 - Stdio entrypoint: `python -m kb_mcp.server.transport_stdio`
+
+## Route Wrapper (Client-Side)
+
+The repo includes a client wrapper that always calls `kb.route` first and then executes the returned
+`execution_plan` (`kb.memory.search` / `kb.search` / `kb.graph_expand` / `kb.explain`).
+
+HTTP mode (requires bearer token in strict/strict_oauth):
+
+```bash
+TOKEN="<jwt_or_access_token>"
+./scripts/kb_route_wrapper.py --transport http --token "$TOKEN" "Какие зависимости у сервиса X?"
+```
+
+Stdio mode (starts local MCP server process automatically):
+
+```bash
+./scripts/kb_route_wrapper.py --transport stdio --stdio-disable-auto-ingest "Какие зависимости у сервиса X?"
+```
+
+Notes:
+
+- `stdio` mode launches `kb_mcp.server.transport_stdio` from this repo's `.venv`.
+- first stdio run may be noticeably slower due to cold start/imports.
+- `--allow-memory-delete` is required for executing `kb.memory.delete` steps.
 
 ## Security Notes
 
