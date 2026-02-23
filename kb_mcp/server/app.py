@@ -24,6 +24,9 @@ from kb_mcp.server.schemas import (
     KbGraphExpandOutput,
     KbMemoryDeleteInput,
     KbMemoryDeleteOutput,
+    KbRouteInput,
+    KbRouteOutput,
+    KbRoutePlanStep,
     KbMemorySearchInput,
     KbMemorySearchOutput,
     KbMemoryUpsertInput,
@@ -40,8 +43,9 @@ else:
     FastContext = Context
 
 RUNTIME_TOOL_POLICY_PROMPT = """Ты работаешь с MCP tools базы знаний.
-Всегда сначала определяй intent и вызывай tools до финального ответа, если факт можно проверить.
+Всегда сначала вызывай kb.route, затем следуй execution_plan и вызывай tools до финального ответа, если факт можно проверить.
 Обязательный порядок:
+0) kb.route для определения intent и плана;
 1) kb.memory.search для user/workspace контекста;
 2) kb.search для factual evidence и citations;
 3) kb.graph_expand для зависимостей/impact;
@@ -186,6 +190,98 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
             identity_source=auth.identity_source,
             acl_decision=acl_decision,
         )
+
+    def build_execution_plan(*, intent: str) -> list[KbRoutePlanStep]:
+        if intent == "memory_delete":
+            return [
+                KbRoutePlanStep(
+                    tool="kb.memory.delete",
+                    purpose="Delete stored memory for selected IDs or all records for current subject/workspace.",
+                )
+            ]
+        if intent == "memory_context":
+            return [
+                KbRoutePlanStep(
+                    tool="kb.memory.search",
+                    purpose="Load prior user/workspace memory relevant to the question.",
+                ),
+                KbRoutePlanStep(
+                    tool="kb.search",
+                    purpose="Validate or enrich the answer with document evidence and citations.",
+                ),
+            ]
+        if intent == "relation_impact":
+            return [
+                KbRoutePlanStep(
+                    tool="kb.search",
+                    purpose="Find evidence and candidate entities/URIs for graph expansion.",
+                ),
+                KbRoutePlanStep(
+                    tool="kb.graph_expand",
+                    purpose="Expand dependencies / impact paths from selected seed entities.",
+                    when="after selecting seed entity URIs from search results",
+                ),
+            ]
+        if intent == "explainability":
+            return [
+                KbRoutePlanStep(
+                    tool="kb.search",
+                    purpose="Retrieve relevant results and target URIs to explain.",
+                ),
+                KbRoutePlanStep(
+                    tool="kb.explain",
+                    purpose="Explain why selected results are relevant.",
+                    when="after selecting URIs from search results",
+                ),
+            ]
+        return [
+            KbRoutePlanStep(
+                tool="kb.search",
+                purpose="Retrieve factual evidence and citations for the query.",
+            )
+        ]
+
+    @mcp.tool(name="kb.route")
+    def kb_route(payload: KbRouteInput, ctx: FastContext | None = None) -> KbRouteOutput:
+        t0 = perf_counter()
+        auth = deps.auth.resolve_identity(
+            request=_request_from_ctx(ctx),
+            payload_acl=None,
+            allow_legacy_payload=True,
+        )
+        routed = router.route(
+            payload.query,
+            payload.requested_mode,
+            include_memory=payload.include_memory,
+        )
+        out = KbRouteOutput(
+            policy_version=POLICY_VERSION,
+            intent=routed.intent,
+            mode=routed.mode,
+            route_reason=routed.reason,
+            recommended_tools=list(routed.recommended_tools),
+            execution_plan=build_execution_plan(intent=routed.intent),
+            constraints={
+                "memory_write": {
+                    "tool": "kb.memory.upsert",
+                    "requires_citations": True,
+                    "requires_confidence_threshold": True,
+                },
+                "prompts_optional": True,
+            },
+        )
+        deps.metrics.inc("tool.kb.route.calls")
+        latency_ms = int((perf_counter() - t0) * 1000)
+        deps.metrics.observe("tool.kb.route.latency_ms", latency_ms)
+        audit_tool(
+            auth=auth,
+            tool="kb.route",
+            params=payload.model_dump(),
+            result_count=len(out.recommended_tools),
+            latency_ms=latency_ms,
+            acl_decision="n/a",
+        )
+        return out
 
     @mcp.tool(name="kb.search")
     def kb_search(payload: KbSearchInput, ctx: FastContext | None = None) -> KbSearchOutput:
@@ -600,11 +696,13 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
                 "memory_delete",
             ],
             "priority_tools": [
+                "kb.route",
                 "kb.memory.search",
                 "kb.search",
                 "kb.graph_expand",
                 "kb.explain",
             ],
+            "router_tool": "kb.route",
             "memory_write_constraints": {
                 "tool": "kb.memory.upsert",
                 "requires_citations": True,

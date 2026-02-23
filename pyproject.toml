@@ -30,6 +30,9 @@ dev = [
   "mypy>=1.10",
 ]
 
+[tool.setuptools.packages.find]
+include = ["kb_mcp*"]
+
 [tool.ruff]
 line-length = 100
 

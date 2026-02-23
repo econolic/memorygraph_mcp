@@ -152,3 +152,26 @@ class KbMemoryDeleteInput(BaseModel):
 
 class KbMemoryDeleteOutput(BaseModel):
     deleted_count: int
+
+
+class KbRouteInput(BaseModel):
+    query: str
+    requested_mode: Literal["vector", "graph", "hybrid"] = "hybrid"
+    include_memory: bool = True
+
+
+class KbRoutePlanStep(BaseModel):
+    tool: str
+    purpose: str
+    when: str = "always"
+    required: bool = True
+
+
+class KbRouteOutput(BaseModel):
+    policy_version: str
+    intent: Literal["fact_lookup", "relation_impact", "explainability", "memory_context", "memory_delete"]
+    mode: Literal["vector", "graph", "hybrid"]
+    route_reason: str
+    recommended_tools: list[str] = Field(default_factory=list)
+    execution_plan: list[KbRoutePlanStep] = Field(default_factory=list)
+    constraints: dict[str, Any] = Field(default_factory=dict)
