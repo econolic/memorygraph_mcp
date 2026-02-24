@@ -14,6 +14,9 @@
 - `kb.search`:
   - использовать для фактологии, определений, поиска документации, цитат;
   - mode по умолчанию: `hybrid`.
+- `kb.route`:
+  - использовать как primary router tool: возвращает `intent`, `recommended_tools`, `execution_plan`;
+  - клиент/обертка должен сначала пытаться выполнить router-first path, затем исполнять план.
 - `kb.graph_expand`:
   - использовать для зависимостей, impact analysis, путей между сущностями.
 - `kb.explain`:
@@ -27,15 +30,19 @@
 
 ## 3. Правила маршрутизации
 
-1. Если вопрос содержит “что это”, “где описано”, “покажи источник”, “цитату”, сначала вызывай `kb.search`.
+1. Предпочитай router-first path:
+   - сначала вызови `kb.route`;
+   - выполни `execution_plan` из ответа (`recommended_tools` используется как explain/debug);
+   - если `kb.route` недоступен, используй compatibility fallback (ручной выбор tools по правилам ниже).
+2. Если вопрос содержит “что это”, “где описано”, “покажи источник”, “цитату”, сначала вызывай `kb.search`.
    - Если пользователь ограничивает поиск по источнику/свежести, передавай `filters.sources`, `filters.tags`, `filters.updated_after`.
-2. Если вопрос содержит “зависимость”, “влияние”, “кто использует”, “цепочка”, вызывай:
+3. Если вопрос содержит “зависимость”, “влияние”, “кто использует”, “цепочка”, вызывай:
    - `kb.search(mode=hybrid)` и затем
    - `kb.graph_expand`.
-3. Если пользователь просит “почему ты так ответил”, вызывай `kb.explain`.
-4. Если в запросе есть “как мы делали раньше”, “мой прошлый контекст”, сначала вызывай `kb.memory.search`, затем `kb.search`.
-5. Не сохраняй в память ничего без `citations` и достаточного `confidence`.
-6. Если пользователь явно просит обновить KB/пересканировать проект:
+4. Если пользователь просит “почему ты так ответил”, вызывай `kb.explain`.
+5. Если в запросе есть “как мы делали раньше”, “мой прошлый контекст”, сначала вызывай `kb.memory.search`, затем `kb.search`.
+6. Не сохраняй в память ничего без `citations` и достаточного `confidence`.
+7. Если пользователь явно просит обновить KB/пересканировать проект:
    - сначала предпочитай `kb.ingest.git_diff` (быстрее и дешевле);
    - используй `kb.ingest.filesystem`, если нужен полный перескан или git baseline недоступен;
    - учитывай, что ingestion checksum-driven: неизменённые файлы будут пропущены и force-backfill графа не гарантирован текущими контрактами.
@@ -44,9 +51,9 @@
 
 Перед финальным ответом модель должна пройти шаги:
 
-1. Определить intent (`fact_lookup`, `relation_impact`, `explainability`, `memory_context`, `memory_delete`).
-2. Выбрать tool-set.
-3. Выполнить tool calls.
+1. Сначала попытаться вызвать `kb.route` и получить `intent`, `recommended_tools`, `execution_plan`.
+2. Если `kb.route` недоступен, определить intent локально (`fact_lookup`, `relation_impact`, `explainability`, `memory_context`, `memory_delete`) и выбрать tool-set по fallback-правилам.
+3. Выполнить tool calls (предпочтительно по `execution_plan`, если router доступен).
 4. Проверить, что в ответе есть evidence для ключевых утверждений.
 5. Только после этого сформировать текст ответа.
 6. Для relation-impact запросов проверить `kb.search.debug.graph_nonzero`; если `false`, явно указать пониженную уверенность в графовой части ответа.
@@ -62,16 +69,22 @@
 Ты работаешь с MCP tools базы знаний.
 Всегда сначала решай, нужен ли вызов tools.
 Если утверждение можно проверить через KB, сначала вызывай tool.
+Предпочитай router-first path: сначала kb.route, затем исполняй execution_plan.
+Если kb.route недоступен, используй compatibility fallback и выбери tools по intent.
 Приоритет:
-1) kb.memory.search для user/workspace контекста;
-2) kb.search для фактов и цитат;
-3) kb.graph_expand для связей и влияния;
-4) kb.explain для объяснения релевантности.
+1) kb.route для intent + plan;
+2) kb.memory.search для user/workspace контекста;
+3) kb.search для фактов и цитат;
+4) kb.graph_expand для связей и влияния;
+5) kb.explain для объяснения релевантности.
 Сохраняй новые факты только через kb.memory.upsert и только с citations и confidence.
 Не выдумывай источники. Если evidence нет — сообщи это явно.
 ```
 
 ## 6. Few-shot примеры
+
+Примечание: при наличии `kb.route` предпочтителен router-first сценарий (`kb.route` -> `execution_plan`).
+Ниже показаны прямые tool calls как compatibility fallback / понятные reference steps.
 
 ### Example 1: Фактология
 

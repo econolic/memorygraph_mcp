@@ -1,5 +1,9 @@
 # KPI Report (Operational Snapshot)
 
+Snapshot note:
+- This report is a point-in-time release snapshot (`2026-02-21`).
+- Re-run benchmark and refresh operational sync checks after runtime config changes, reindex/backfill, or dataset updates before using it as a current go/no-go signal.
+
 ## Release
 
 - Version: 0.1.0

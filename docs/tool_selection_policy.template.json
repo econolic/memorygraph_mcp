@@ -1,10 +1,34 @@
 {
   "policy_version": "2026-02-19",
   "description": "Runtime policy for MCP tool orchestration in Hybrid KB MCP.",
+  "router_contract": {
+    "primary_tool": "kb.route",
+    "strategy": "router_first_with_compatibility_fallback",
+    "route_output_fields": [
+      "intent",
+      "route_reason",
+      "recommended_tools",
+      "execution_plan"
+    ],
+    "client_execution_rules": [
+      "Call kb.route first when available",
+      "Execute execution_plan in order",
+      "Use recommended_tools for explain/debug, not as authoritative execution order",
+      "Fallback to direct tool selection if kb.route is unavailable"
+    ]
+  },
   "decision_schema": {
     "intent": "fact_lookup|relation_impact|explainability|memory_context|memory_delete",
     "auth_mode": "dual|strict|strict_oauth",
     "identity_source": "authorization_header|payload_jwt|legacy_acl|anonymous",
+    "router_used": true,
+    "recommended_tools": ["kb.search"],
+    "execution_plan": [
+      {
+        "name": "kb.search",
+        "reason": "Need evidence with citations"
+      }
+    ],
     "tools": [
       {
         "name": "kb.search",
@@ -13,6 +37,7 @@
     ],
     "requires_citations": true,
     "fallback": {
+      "kb_route_unavailable": "compatibility_manual_tool_selection",
       "graph_unavailable": "vector_only_with_disclaimer",
       "graph_nonzero_false_on_relation_query": "state_low_graph_confidence"
     }
