@@ -20,7 +20,7 @@ jobs:
       TRANSFORMERS_NO_ADVISORY_WARNINGS: "1"
     steps:
       - name: Checkout head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
