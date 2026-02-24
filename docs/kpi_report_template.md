@@ -5,6 +5,10 @@
 - Version:
 - Date:
 - Evaluator:
+- Deployment class (`local-dev|self-hosted-internal|self-hosted-behind-proxy`):
+- Runtime profile (`docker-compose.yml|docker-compose.selfhosted.yml|source`):
+- Auth mode used for release gate:
+- Benchmark corpus / dataset version:
 
 ## Retrieval Metrics
 

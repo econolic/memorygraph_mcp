@@ -279,6 +279,7 @@ class Neo4jGraphStore:
                 "acl_allow": list(acl_allow),
             },
             database_=self._database,
+            routing_=RoutingControl.WRITE,
         )
 
     def upsert_memory_links(self, *, memory_uri: str, entity_uris: list[str], workspace_id: str) -> None:
@@ -291,6 +292,7 @@ class Neo4jGraphStore:
             "MERGE (m)-[:MEMORY_REFERS_TO]->(e)",
             parameters_={"memory_uri": memory_uri, "entity_uris": entity_uris, "workspace_id": workspace_id},
             database_=self._database,
+            routing_=RoutingControl.WRITE,
         )
 
     def delete_memory_nodes(self, *, memory_uris: list[str], filters: dict[str, object]) -> int:
@@ -300,6 +302,7 @@ class Neo4jGraphStore:
             "DETACH DELETE m",
             parameters_={"memory_uris": memory_uris, "workspace_id": workspace_id},
             database_=self._database,
+            routing_=RoutingControl.WRITE,
         )[1]
         return int(summary.counters.nodes_deleted)
 
@@ -310,6 +313,7 @@ class Neo4jGraphStore:
             "DETACH DELETE c",
             parameters_={"chunk_uris": chunk_uris, "workspace_id": workspace_id},
             database_=self._database,
+            routing_=RoutingControl.WRITE,
         )[1]
         return int(summary.counters.nodes_deleted)
 
@@ -340,4 +344,5 @@ class Neo4jGraphStore:
                     "acl_allow": list(acl_allow),
                 },
                 database_=self._database,
+                routing_=RoutingControl.WRITE,
             )

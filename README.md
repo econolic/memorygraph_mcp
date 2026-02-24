@@ -49,6 +49,21 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
 - LLM↔MCP context control roadmap: `docs/llm_mcp_context_control_plan.md`
 - KPI template: `docs/kpi_report_template.md`
 - Current KPI report: `docs/kpi_report.md`
+- Contribution guide: `CONTRIBUTING.md`
+- Security policy: `SECURITY.md`
+
+## Support Scope
+
+Supported (default project target):
+
+- Local development (`stdio` or HTTP on localhost)
+- Self-hosted internal/protected network deployments
+- Self-hosted deployments behind a reverse proxy with TLS and hardening
+
+Not supported by default:
+
+- Public SaaS / direct internet-facing multi-tenant service
+- Managed platform responsibilities (WAF, abuse controls, tenant quotas, billing, compliance ops)
 
 ## Quickstart
 
@@ -78,6 +93,18 @@ Run Docker Desktop stack:
 mkdir -p .docker-data/qdrant .docker-data/neo4j/data .docker-data/mcp
 docker compose up -d --build
 ```
+
+Hardened self-hosted profile (recommended baseline for non-dev deployments):
+
+```bash
+cp .env.selfhosted.example .env
+docker compose -f docker-compose.selfhosted.yml up -d --build
+```
+
+Notes:
+
+- `docker-compose.yml` is the local/dev quickstart profile.
+- `docker-compose.selfhosted.yml` is the production-oriented self-hosted profile (DB ports internal-only by default).
 
 ## MCP Endpoint
 
@@ -118,6 +145,39 @@ Notes:
 - In `strict_oauth` mode, HTTP requests require `Authorization: Bearer ...`; token is validated against OIDC JWKS.
 - HTTP transport supports Host/Origin restrictions via `KB_TRANSPORT_ALLOWED_HOSTS` and `KB_TRANSPORT_ALLOWED_ORIGINS`.
 - Graph retrieval enforces object ACL by default (`KB_GRAPH_ENFORCE_OBJECT_ACL=true`).
+- Startup now rejects weak/placeholder JWT secrets in unsafe modes (e.g. `strict`, or `dual` with non-localhost HTTP bind).
+
+## Production Readiness Checklist (Self-Hosted)
+
+Before using this project outside local/dev:
+
+1. Set `KB_AUTH_MODE=strict` or `KB_AUTH_MODE=strict_oauth`.
+2. Replace all placeholder secrets/passwords (`KB_JWT_SECRET`, Neo4j/Postgres credentials).
+3. Put MCP behind a reverse proxy with TLS (HTTPS) and request limits.
+4. Keep Qdrant/Neo4j/Postgres on internal network only (no public exposure by default).
+5. Verify persistence and backups for `.docker-data/*` or external DBs.
+6. Run `./scripts/release_selfhosted_smoke.sh`.
+7. Run benchmark gates (`bench/run_benchmark.py --enforce-gates`) and record results in `docs/kpi_report.md`.
+8. Enable monitoring where needed (`KB_PROMETHEUS_ENABLED`, `KB_OTEL_ENABLED`).
+
+## Public SaaS / Internet-Facing Risks
+
+This repository is an OSS **self-hosted** MCP server, not a managed SaaS platform.
+
+If you expose it directly to the public internet or operate it as multi-tenant SaaS, you must additionally build and operate:
+
+- TLS termination and certificate lifecycle management at the edge
+- reverse proxy hardening (Origin policy enforcement, request size limits, timeouts)
+- rate limiting, abuse prevention, and DoS controls
+- WAF / bot mitigation where applicable
+- secret management and rotation (not `.env` files alone)
+- stronger tenant isolation verification beyond current app-level ACL checks
+- quotas, noisy-neighbor controls, and service-level admission controls
+- compliance/privacy operations (audit retention, PII handling, deletion workflows)
+- HA/failover/backup restore drills and on-call/SLO operations
+- dependency/CVE monitoring and patch rollout process
+
+For self-hosted production guidance, see `docs/install_deploy_config.md`.
 
 ## Bearer Token Setup for MCP Clients
 
@@ -267,3 +327,21 @@ Run reproducible smoke (local test issuer + JWKS + signed token + `tools/list`):
 ```
 
 Manual guide and request example: `docs/install_deploy_config.md` (section: strict_oauth smoke with local test JWKS/issuer).
+
+## Self-Hosted Release Smoke
+
+Reproducible strict-mode self-hosted smoke:
+
+```bash
+cp .env.selfhosted.example .env
+./scripts/release_selfhosted_smoke.sh
+```
+
+What it checks (baseline):
+
+- `tools/list`, `kb.route`, `kb.search`
+- ingestion + citations
+- wrapper (`kb.route` + `execution_plan`)
+- memory lifecycle (`upsert/search/delete`)
+- resource ACL deny with foreign workspace token
+- persistence across MCP restart

@@ -46,7 +46,8 @@ Primary data flows:
 ## 4. Deployment Modes
 
 - Path A (source/local): fastest for development and debugging.
-- Path B (Docker Desktop): recommended for stable local runtime with persistence.
+- Path B (Docker Desktop): recommended for stable local runtime with persistence (dev/team local baseline).
+- Supported self-hosted production profile: `docker-compose.selfhosted.yml` + `.env.selfhosted.example` (hardened baseline).
 - Path C (external DB mode): keep MCP local/containerized, connect to managed Qdrant/Neo4j/Postgres.
 
 ## 5. Configuration Model (`.env`)
@@ -127,6 +128,7 @@ Security recommendation for HTTP runtime:
 - for `strict_oauth`: set `KB_OAUTH_ISSUER_URL`, `KB_OAUTH_JWKS_URL`, `KB_OAUTH_AUDIENCE`;
 - keep Host/Origin allowlists constrained to trusted local endpoints.
 - keep `KB_GRAPH_ENFORCE_OBJECT_ACL=true` for production.
+- startup validation rejects placeholder JWT secrets in unsafe modes (`strict`, or `dual` with non-localhost HTTP bind).
 
 ## 6. Install Path A: Source (venv, no Docker)
 
@@ -274,6 +276,40 @@ Persistent host paths (default):
 - Neo4j: `./.docker-data/neo4j/data`
 - MCP metadata/checksums SQLite: `./.docker-data/mcp`
 
+### 7.5 Supported Self-Hosted Production Profile (hardened baseline)
+
+Use this profile for self-hosted deployments beyond local/dev quickstart:
+
+```bash
+cp .env.selfhosted.example .env
+mkdir -p .docker-data/qdrant .docker-data/neo4j/data .docker-data/mcp .docker-data/postgres
+docker compose -f docker-compose.selfhosted.yml up -d --build
+docker compose -f docker-compose.selfhosted.yml ps
+```
+
+Key properties of `docker-compose.selfhosted.yml`:
+
+- MCP is the only service published by default.
+- Qdrant / Neo4j / optional Postgres stay on internal Docker network (no host port publish).
+- `KB_AUTH_MODE=strict` is the intended baseline in `.env.selfhosted.example`.
+- all credentials/secrets are supplied via `.env` (no dev fallback passwords in the profile itself).
+
+Recommended topology for internet-exposed clients:
+
+`Client -> Reverse Proxy (TLS, rate limit, request size/timeouts) -> MCP -> Qdrant/Neo4j/Postgres (internal network only)`
+
+Why direct exposure of raw MCP is not recommended by default:
+
+- this repo does not ship a full edge stack (TLS termination, WAF, abuse controls, global rate limits);
+- multi-tenant SaaS controls (quotas, billing, noisy-neighbor isolation) are out of scope;
+- self-hosted operators must decide and operate the edge/security platform.
+
+Release smoke for this profile:
+
+```bash
+./scripts/release_selfhosted_smoke.sh
+```
+
 ## 8. Install Path C: External/Managed DB mode
 
 Set external endpoints in `.env`:
@@ -325,6 +361,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO <user>;
 - `strict`:
   - HTTP requests without valid bearer are rejected;
   - recommended default for all new deployments.
+  - startup will fail if `KB_JWT_SECRET` is empty or still a placeholder value.
 - `strict_oauth`:
   - HTTP requests require `Authorization: Bearer ...`;
   - bearer tokens are validated via OIDC issuer + JWKS and optional required scopes;
@@ -409,6 +446,7 @@ Use:
 - narrow `KB_TRANSPORT_ALLOWED_ORIGINS`
 
 Default host in app config is `127.0.0.1`; Docker overrides to `0.0.0.0` via `.env`/compose.
+For internet-exposed deployments, use a reverse proxy with TLS and restrict direct MCP exposure.
 
 ## 10. MCP Client Integration
 
@@ -546,6 +584,14 @@ CI benchmark diff:
 - verify `Authorization: Bearer <token>` header;
 - for `strict`: verify JWT secret/algorithm/claims (`sub`, `workspace_id`);
 - for `strict_oauth`: verify `KB_OAUTH_ISSUER_URL`, `KB_OAUTH_JWKS_URL`, `KB_OAUTH_AUDIENCE`, scopes.
+
+### Startup fails due to weak secret validation
+
+- Symptom: process exits with a message about weak/placeholder `KB_JWT_SECRET`.
+- Actions:
+  - set a strong `KB_JWT_SECRET` in `.env` / secret store;
+  - avoid placeholder values from examples/templates;
+  - for local-only dev compatibility, bind HTTP to `127.0.0.1` and use `KB_AUTH_MODE=dual` only if migration behavior is required.
 
 ### Neo4j degradation / fallback to vector
 

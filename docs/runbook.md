@@ -8,6 +8,8 @@ Use this runbook for live incidents and recovery actions.
 - Full deployment and configuration: `docs/install_deploy_config.md`
 - Auth hardening and strict mode: `docs/install_deploy_config.md`
 - Persistence setup and restart validation: `docs/install_deploy_config.md`
+- Supported self-hosted hardened profile: `docker-compose.selfhosted.yml`, `.env.selfhosted.example`
+- Self-hosted release smoke: `scripts/release_selfhosted_smoke.sh`
 - KPI and benchmark process: `docs/kpi_report_template.md`, `docs/kpi_report.md`
 
 ## Health Checks
@@ -50,6 +52,15 @@ Use this runbook for live incidents and recovery actions.
   4. If `KB_AUTH_MODE=strict_oauth`, verify `KB_OAUTH_ISSUER_URL`, `KB_OAUTH_JWKS_URL`, `KB_OAUTH_AUDIENCE`, and required scopes.
   5. If needed during migration, switch to `KB_AUTH_MODE=dual` temporarily.
   6. Re-run smoke from `./scripts/smoke_strict_oauth.sh` to isolate config issues.
+
+### Startup fails due to weak/placeholder JWT secret
+
+- Symptom: MCP exits during startup with security validation error.
+- Actions:
+  1. Replace `KB_JWT_SECRET` placeholder with a strong secret.
+  2. Confirm `KB_AUTH_MODE` is intentional (`strict`/`strict_oauth` for self-hosted).
+  3. If running local-only migration tests, bind HTTP to `127.0.0.1` before using `dual`.
+  4. Restart service and confirm `security_config_validated` log entry.
 
 ### ACL denies expected reads
 
@@ -119,6 +130,15 @@ If data appears lost after restart:
 2. Confirm `.env` paths were not changed unexpectedly.
 3. Validate metadata backend selection (`sqlite` vs `postgres`).
 4. Re-run minimal search and resource read checks with valid bearer.
+
+## Release Smoke (Self-Hosted)
+
+Use before tagging a self-hosted OSS release:
+
+1. Prepare `.env` from `.env.selfhosted.example` and set strong secrets/passwords.
+2. Run `./scripts/release_selfhosted_smoke.sh`.
+3. Run benchmark gates and record results in `docs/kpi_report.md`.
+4. If any step fails, fix configuration/runtime issue before release tagging.
 
 ## Deletion Requests
 

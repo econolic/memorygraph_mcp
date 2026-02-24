@@ -1,0 +1,119 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.17.0
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ${KB_QDRANT_STORAGE_PATH:-./.docker-data/qdrant}
+        target: /qdrant/storage
+    networks:
+      - kb_internal
+
+  neo4j:
+    image: neo4j:5.26
+    restart: unless-stopped
+    environment:
+      - NEO4J_AUTH=${NEO4J_AUTH:?set NEO4J_AUTH in .env}
+    volumes:
+      - type: bind
+        source: ${KB_NEO4J_DATA_PATH:-./.docker-data/neo4j/data}
+        target: /data
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/7687'"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    networks:
+      - kb_internal
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    profiles: ["postgres"]
+    environment:
+      - POSTGRES_DB=${KB_POSTGRES_DB:-kb_metadata}
+      - POSTGRES_USER=${KB_POSTGRES_USER:-kb_user}
+      - POSTGRES_PASSWORD=${KB_POSTGRES_PASSWORD:-replace-with-strong-postgres-password}
+    volumes:
+      - type: bind
+        source: ${KB_POSTGRES_STORAGE_PATH:-./.docker-data/postgres}
+        target: /var/lib/postgresql/data
+    networks:
+      - kb_internal
+
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - KB_QDRANT_URL=${KB_QDRANT_URL:-http://qdrant:6333}
+      - KB_NEO4J_URI=${KB_NEO4J_URI:-bolt://neo4j:7687}
+      - KB_VECTOR_BACKEND=${KB_VECTOR_BACKEND:-qdrant}
+      - KB_GRAPH_BACKEND=${KB_GRAPH_BACKEND:-neo4j}
+      - KB_METADATA_BACKEND=${KB_METADATA_BACKEND:-sqlite}
+      - KB_METADATA_DSN=${KB_METADATA_DSN:-sqlite:///./.kb_mcp/metadata.db}
+      - KB_HTTP_HOST=${KB_HTTP_HOST:-0.0.0.0}
+      - KB_HTTP_PORT=${KB_HTTP_PORT:-8080}
+      - KB_AUTH_MODE=${KB_AUTH_MODE:-strict}
+      - KB_OAUTH_ISSUER_URL=${KB_OAUTH_ISSUER_URL:-}
+      - KB_OAUTH_AUDIENCE=${KB_OAUTH_AUDIENCE:-}
+      - KB_OAUTH_JWKS_URL=${KB_OAUTH_JWKS_URL:-}
+      - KB_OAUTH_REQUIRED_SCOPES=${KB_OAUTH_REQUIRED_SCOPES:-}
+      - KB_TRANSPORT_SECURITY_ENABLED=${KB_TRANSPORT_SECURITY_ENABLED:-true}
+      - KB_TRANSPORT_ALLOWED_HOSTS=${KB_TRANSPORT_ALLOWED_HOSTS:-127.0.0.1:*,localhost:*,[::1]:*}
+      - KB_TRANSPORT_ALLOWED_ORIGINS=${KB_TRANSPORT_ALLOWED_ORIGINS:-http://127.0.0.1:*,http://localhost:*,http://[::1]:*}
+      - KB_NEO4J_USER=${KB_NEO4J_USER:-neo4j}
+      - KB_NEO4J_PASSWORD=${KB_NEO4J_PASSWORD:?set KB_NEO4J_PASSWORD in .env}
+      - KB_NEO4J_DATABASE=${KB_NEO4J_DATABASE:-neo4j}
+      - KB_QDRANT_COLLECTION_CHUNKS=${KB_QDRANT_COLLECTION_CHUNKS:-kb_chunks}
+      - KB_QDRANT_COLLECTION_MEMORY=${KB_QDRANT_COLLECTION_MEMORY:-kb_memory}
+      - KB_EMBEDDING_PROVIDER=${KB_EMBEDDING_PROVIDER:-local}
+      - KB_EMBEDDING_MODEL=${KB_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      - KB_EMBEDDING_MODEL_REVISION=${KB_EMBEDDING_MODEL_REVISION:-}
+      - KB_EMBEDDING_BASE_URL=${KB_EMBEDDING_BASE_URL:-}
+      - KB_EMBEDDING_API_KEY=${KB_EMBEDDING_API_KEY:-}
+      - KB_EMBEDDING_DIMENSIONS=${KB_EMBEDDING_DIMENSIONS:-384}
+      - KB_EMBEDDING_BATCH_SIZE=${KB_EMBEDDING_BATCH_SIZE:-32}
+      - KB_EMBEDDING_CACHE_ENABLED=${KB_EMBEDDING_CACHE_ENABLED:-true}
+      - KB_EMBEDDING_CACHE_MAX_ITEMS=${KB_EMBEDDING_CACHE_MAX_ITEMS:-4096}
+      - KB_ENTITY_EXTRACTION_MIN_SYMBOL_LEN=${KB_ENTITY_EXTRACTION_MIN_SYMBOL_LEN:-3}
+      - KB_ENTITY_EXTRACTION_MIN_TERM_LEN=${KB_ENTITY_EXTRACTION_MIN_TERM_LEN:-3}
+      - KB_ENTITY_SYMBOL_ALLOW_PATTERN=${KB_ENTITY_SYMBOL_ALLOW_PATTERN:-^[A-Za-z_][A-Za-z0-9_]{2,}$}
+      - KB_ENTITY_TABLE_ALLOW_PATTERN=${KB_ENTITY_TABLE_ALLOW_PATTERN:-^[a-z_]+\.[a-z_]+$}
+      - KB_ENTITY_TERM_ALLOW_PATTERN=${KB_ENTITY_TERM_ALLOW_PATTERN:-^[А-Яа-яЁё][А-Яа-яЁё0-9_\\-]{2,}$}
+      - KB_ENTITY_EXTRACTION_STOPWORDS=${KB_ENTITY_EXTRACTION_STOPWORDS:-the,and,with,from,that,this,for,are,или,как,для,это,что,при,class,def,import,return,true,false,none}
+      - KB_OTEL_ENABLED=${KB_OTEL_ENABLED:-false}
+      - KB_OTEL_EXPORTER_OTLP_ENDPOINT=${KB_OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - KB_OTEL_EXPORTER_OTLP_PROTOCOL=${KB_OTEL_EXPORTER_OTLP_PROTOCOL:-http/protobuf}
+      - KB_PROMETHEUS_ENABLED=${KB_PROMETHEUS_ENABLED:-false}
+      - KB_PROMETHEUS_PORT=${KB_PROMETHEUS_PORT:-9464}
+      - KB_AUTO_INGEST_ENABLED=${KB_AUTO_INGEST_ENABLED:-true}
+      - KB_AUTO_INGEST_ROOTS=${KB_AUTO_INGEST_ROOTS:-/app/kb_mcp}
+      - KB_AUTO_INGEST_WORKSPACE_ID=${KB_AUTO_INGEST_WORKSPACE_ID:-w1}
+      - KB_AUTO_INGEST_ACL_SUBJECT=${KB_AUTO_INGEST_ACL_SUBJECT:-u1}
+      - KB_AUTO_INGEST_INTERVAL_S=${KB_AUTO_INGEST_INTERVAL_S:-900}
+      - KB_AUTO_INGEST_RUN_ON_START=${KB_AUTO_INGEST_RUN_ON_START:-true}
+      - KB_AUTO_INGEST_FULL_INTERVAL_CYCLES=${KB_AUTO_INGEST_FULL_INTERVAL_CYCLES:-8}
+      - KB_AUTO_INGEST_GIT_SINCE_REF=${KB_AUTO_INGEST_GIT_SINCE_REF:-HEAD~1}
+      - KB_AUTO_INGEST_RETRY_ATTEMPTS=${KB_AUTO_INGEST_RETRY_ATTEMPTS:-3}
+      - KB_AUTO_INGEST_RETRY_BACKOFF_S=${KB_AUTO_INGEST_RETRY_BACKOFF_S:-1.5}
+    ports:
+      - "${KB_MCP_PUBLISH_HOST:-127.0.0.1}:${KB_HTTP_PORT:-8080}:${KB_HTTP_PORT:-8080}"
+    volumes:
+      - type: bind
+        source: ${KB_MCP_DATA_PATH:-./.docker-data/mcp}
+        target: /app/.kb_mcp
+    depends_on:
+      qdrant:
+        condition: service_started
+      neo4j:
+        condition: service_healthy
+    networks:
+      - kb_internal
+
+networks:
+  kb_internal:
+    driver: bridge

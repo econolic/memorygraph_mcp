@@ -209,3 +209,74 @@ class AppConfig:
             memory_confidence_threshold=float(getenv("KB_MEMORY_CONFIDENCE_THRESHOLD", "0.75")),
             memory_retention_days=int(getenv("KB_MEMORY_RETENTION_DAYS", "0")),
         )
+
+
+_WEAK_SECRET_PLACEHOLDERS = {
+    "",
+    "change-me",
+    "replace-with-strong-32plus-char-secret",
+}
+
+
+def _normalized_bind_host(host: str) -> str:
+    normalized = str(host).strip().lower()
+    if normalized.startswith("[") and normalized.endswith("]"):
+        normalized = normalized[1:-1]
+    return normalized
+
+
+def is_localhost_bind(host: str) -> bool:
+    return _normalized_bind_host(host) in {"127.0.0.1", "::1", "localhost"}
+
+
+def is_weak_jwt_secret(secret: str) -> bool:
+    return str(secret).strip() in _WEAK_SECRET_PLACEHOLDERS
+
+
+def security_validation_summary(cfg: AppConfig, *, transport: str) -> dict[str, object]:
+    bind_host = _normalized_bind_host(cfg.http_host)
+    return {
+        "transport": transport,
+        "auth_mode": cfg.auth_mode,
+        "http_host": cfg.http_host,
+        "bind_scope": "localhost" if is_localhost_bind(bind_host) else "network",
+        "transport_security_enabled": cfg.transport_security_enabled,
+        "jwt_secret_weak": is_weak_jwt_secret(cfg.jwt_secret),
+        "strict_oauth_configured": bool(cfg.oauth_issuer_url and cfg.oauth_jwks_url),
+    }
+
+
+def validate_security_config(cfg: AppConfig, *, transport: str) -> list[str]:
+    warnings: list[str] = []
+    weak_secret = is_weak_jwt_secret(cfg.jwt_secret)
+    network_exposed_http = transport == "http" and not is_localhost_bind(cfg.http_host)
+
+    if cfg.auth_mode == "strict" and weak_secret:
+        raise ValueError(
+            "KB_AUTH_MODE=strict requires a strong KB_JWT_SECRET; "
+            "replace the placeholder secret and restart."
+        )
+
+    if cfg.auth_mode == "dual" and network_exposed_http and weak_secret:
+        raise ValueError(
+            "KB_AUTH_MODE=dual with non-localhost HTTP bind requires a strong KB_JWT_SECRET; "
+            "set KB_JWT_SECRET or bind to 127.0.0.1 for local-only dev."
+        )
+
+    if cfg.auth_mode == "dual" and weak_secret:
+        warnings.append(
+            "KB_AUTH_MODE=dual is using a placeholder KB_JWT_SECRET. "
+            "This is acceptable only for localhost development."
+        )
+
+    if cfg.auth_mode == "strict_oauth":
+        if not cfg.oauth_issuer_url or not cfg.oauth_jwks_url:
+            raise ValueError(
+                "KB_AUTH_MODE=strict_oauth requires KB_OAUTH_ISSUER_URL and KB_OAUTH_JWKS_URL."
+            )
+        if weak_secret:
+            warnings.append(
+                "KB_JWT_SECRET is unused in strict_oauth mode, but still set to a placeholder value."
+            )
+
+    return warnings
