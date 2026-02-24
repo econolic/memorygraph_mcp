@@ -86,10 +86,12 @@ docker compose up -d --build
 
 ## Route Wrapper (Client-Side)
 
-The repo includes a client wrapper that always calls `kb.route` first and then executes the returned
+The repo includes a client wrapper that tries `kb.route` first and then executes the returned
 `execution_plan` (`kb.memory.search` / `kb.search` / `kb.graph_expand` / `kb.explain`).
+If `kb.route` is unavailable on the connected server, the wrapper falls back to a compatibility
+plan (`kb.memory.search` + `kb.search`).
 
-HTTP mode (requires bearer token in strict/strict_oauth):
+HTTP mode (the wrapper currently requires a bearer token; this is mandatory for strict/strict_oauth servers):
 
 ```bash
 TOKEN="<jwt_or_access_token>"
@@ -104,7 +106,7 @@ Stdio mode (starts local MCP server process automatically):
 
 Notes:
 
-- `stdio` mode launches `kb_mcp.server.transport_stdio` from this repo's `.venv`.
+- `stdio` mode launches `kb_mcp.server.transport_stdio` from this repo's `.venv` by default.
 - first stdio run may be noticeably slower due to cold start/imports.
 - `--allow-memory-delete` is required for executing `kb.memory.delete` steps.
 
