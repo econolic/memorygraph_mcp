@@ -105,6 +105,16 @@ class McpHttpClient:
         if "error" in data:
             raise RuntimeError(f"MCP tool error {name}: {data['error']}")
         result = data.get("result", {})
+        if isinstance(result, dict) and result.get("isError") is True:
+            content = result.get("content", [])
+            error_text = ""
+            if isinstance(content, list) and content:
+                first = content[0]
+                if isinstance(first, dict):
+                    text = first.get("text")
+                    if isinstance(text, str):
+                        error_text = text
+            raise RuntimeError(f"MCP tool error {name}: {error_text or result}")
         return _extract_tool_output(
             structured=result.get("structuredContent"),
             content=result.get("content", []),
@@ -237,17 +247,57 @@ def _collect_result_uris(search_result: dict[str, Any], limit: int) -> list[str]
     return uris
 
 
-def execute_pipeline(client: McpHttpClient, cfg: WrapperConfig, query: str) -> dict[str, Any]:
-    route = client.call_tool(
-        "kb.route",
-        {
-            "payload": {
-                "query": query,
-                "requested_mode": cfg.requested_mode,
-                "include_memory": cfg.include_memory,
+def _legacy_route_fallback(cfg: WrapperConfig, reason: str) -> dict[str, Any]:
+    plan: list[dict[str, Any]] = []
+    if cfg.include_memory:
+        plan.append(
+            {
+                "tool": "kb.memory.search",
+                "purpose": "Compatibility fallback: load memory before search because kb.route is unavailable.",
+                "when": "always",
+                "required": False,
             }
-        },
+        )
+    plan.append(
+        {
+            "tool": "kb.search",
+            "purpose": "Compatibility fallback: execute direct search because kb.route is unavailable.",
+            "when": "always",
+            "required": True,
+        }
     )
+    return {
+        "policy_version": "legacy-compat",
+        "intent": "memory_context" if cfg.include_memory else "fact_lookup",
+        "mode": cfg.requested_mode,
+        "route_reason": reason,
+        "recommended_tools": [step["tool"] for step in plan],
+        "execution_plan": plan,
+        "constraints": {
+            "compatibility_mode": True,
+            "router_tool": "kb.route",
+        },
+    }
+
+
+def execute_pipeline(client: McpHttpClient, cfg: WrapperConfig, query: str) -> dict[str, Any]:
+    try:
+        route = client.call_tool(
+            "kb.route",
+            {
+                "payload": {
+                    "query": query,
+                    "requested_mode": cfg.requested_mode,
+                    "include_memory": cfg.include_memory,
+                }
+            },
+        )
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "Unknown tool: kb.route" in msg:
+            route = _legacy_route_fallback(cfg, "kb.route_unavailable_http_fallback")
+        else:
+            raise
 
     outputs: dict[str, Any] = {"route": route}
     skipped: list[dict[str, Any]] = []
@@ -375,19 +425,19 @@ async def _execute_pipeline_stdio_async(cfg: WrapperConfig, query: str) -> dict[
             tools = await session.list_tools()
             tool_names = {tool.name for tool in tools.tools}
             if "kb.route" not in tool_names:
-                raise RuntimeError("Connected stdio server does not expose kb.route")
-
-            route = await call_tool(
-                session,
-                "kb.route",
-                {
-                    "payload": {
-                        "query": query,
-                        "requested_mode": cfg.requested_mode,
-                        "include_memory": cfg.include_memory,
-                    }
-                },
-            )
+                route = _legacy_route_fallback(cfg, "kb.route_unavailable_stdio_fallback")
+            else:
+                route = await call_tool(
+                    session,
+                    "kb.route",
+                    {
+                        "payload": {
+                            "query": query,
+                            "requested_mode": cfg.requested_mode,
+                            "include_memory": cfg.include_memory,
+                        }
+                    },
+                )
 
             outputs: dict[str, Any] = {"route": route}
             skipped: list[dict[str, Any]] = []
