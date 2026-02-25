@@ -5,15 +5,22 @@ import time
 from collections import defaultdict
 from contextlib import contextmanager
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
+
+_PROM_CollectorRegistry: Any | None = None
+_PROM_Counter: Any | None = None
+_PROM_Histogram: Any | None = None
+_PROM_start_http_server: Any | None = None
 
 try:
-    from prometheus_client import CollectorRegistry, Counter, Histogram, start_http_server  # type: ignore[import-not-found]
+    from prometheus_client import CollectorRegistry, Counter, Histogram, start_http_server
 except Exception:  # pragma: no cover - optional dependency safety
-    CollectorRegistry = None
-    Counter = None
-    Histogram = None
-    start_http_server = None
+    pass
+else:
+    _PROM_CollectorRegistry = CollectorRegistry
+    _PROM_Counter = Counter
+    _PROM_Histogram = Histogram
+    _PROM_start_http_server = start_http_server
 
 
 _PROM_STARTED = False
@@ -24,8 +31,19 @@ class MetricsRegistry:
     def __init__(self, *, prometheus_enabled: bool = False) -> None:
         self.counters: dict[str, int] = defaultdict(int)
         self.timers_ms: dict[str, list[float]] = defaultdict(list)
-        self._prometheus_enabled = bool(prometheus_enabled and CollectorRegistry and Counter and Histogram)
-        self._prom_registry = CollectorRegistry() if self._prometheus_enabled else None
+        self._prometheus_enabled = bool(
+            prometheus_enabled
+            and _PROM_CollectorRegistry is not None
+            and _PROM_Counter is not None
+            and _PROM_Histogram is not None
+        )
+        if self._prometheus_enabled:
+            registry_ctor = _PROM_CollectorRegistry
+            if registry_ctor is None:
+                raise RuntimeError("Prometheus registry constructor unavailable while metrics are enabled")
+            self._prom_registry = registry_ctor()
+        else:
+            self._prom_registry = None
 
         self._tool_calls = None
         self._tool_latency = None
@@ -36,41 +54,46 @@ class MetricsRegistry:
         self._auto_ingest_root_failures = None
 
         if self._prometheus_enabled:
-            self._tool_calls = Counter(
+            counter_ctor = _PROM_Counter
+            histogram_ctor = _PROM_Histogram
+            if counter_ctor is None or histogram_ctor is None or self._prom_registry is None:
+                raise RuntimeError("Prometheus constructors unavailable while metrics are enabled")
+
+            self._tool_calls = counter_ctor(
                 "kb_tool_calls_total",
                 "Total MCP tool calls",
                 ["tool"],
                 registry=self._prom_registry,
             )
-            self._tool_latency = Histogram(
+            self._tool_latency = histogram_ctor(
                 "kb_tool_latency_seconds",
                 "MCP tool latency in seconds",
                 ["tool"],
                 registry=self._prom_registry,
             )
-            self._retrieval_stage_latency = Histogram(
+            self._retrieval_stage_latency = histogram_ctor(
                 "kb_retrieval_stage_latency_seconds",
                 "Hybrid retrieval stage latency in seconds",
                 ["stage"],
                 registry=self._prom_registry,
             )
-            self._auto_ingest_cycles = Counter(
+            self._auto_ingest_cycles = counter_ctor(
                 "kb_auto_ingest_cycles_total",
                 "Auto-ingest cycles by reason and status",
                 ["reason", "status"],
                 registry=self._prom_registry,
             )
-            self._auto_ingest_failures = Counter(
+            self._auto_ingest_failures = counter_ctor(
                 "kb_auto_ingest_failed_roots_total",
                 "Auto-ingest failed roots count",
                 registry=self._prom_registry,
             )
-            self._auto_ingest_retried_roots = Counter(
+            self._auto_ingest_retried_roots = counter_ctor(
                 "kb_auto_ingest_retried_roots_total",
                 "Auto-ingest roots that required retries",
                 registry=self._prom_registry,
             )
-            self._auto_ingest_root_failures = Counter(
+            self._auto_ingest_root_failures = counter_ctor(
                 "kb_auto_ingest_root_failures_total",
                 "Auto-ingest root failures by reason/method/error kind",
                 ["reason", "method", "error_kind"],
@@ -79,7 +102,9 @@ class MetricsRegistry:
 
     @property
     def prometheus_registry(self) -> object | None:
-        return self._prom_registry
+        if self._prom_registry is None:
+            return None
+        return cast(object, self._prom_registry)
 
     @property
     def prometheus_enabled(self) -> bool:
@@ -156,11 +181,11 @@ class MetricsRegistry:
 
 def start_prometheus_exporter(*, port: int, registry: Any) -> bool:
     global _PROM_STARTED
-    if start_http_server is None:
+    if _PROM_start_http_server is None:
         return False
     with _PROM_LOCK:
         if _PROM_STARTED:
             return False
-        start_http_server(port, registry=registry)
+        _PROM_start_http_server(port, registry=registry)
         _PROM_STARTED = True
         return True

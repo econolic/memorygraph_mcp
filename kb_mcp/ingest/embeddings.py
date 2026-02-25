@@ -108,12 +108,13 @@ class LocalSentenceTransformerEmbedder:
         self._cache = _LRUEmbeddingCache(cache_max_items) if cache_enabled else None
 
         try:
-            from sentence_transformers import SentenceTransformer  # type: ignore[import-not-found]
+            from sentence_transformers import SentenceTransformer
 
-            kwargs: dict[str, object] = {}
-            if model_revision.strip():
-                kwargs["revision"] = model_revision.strip()
-            model = SentenceTransformer(model_name, **kwargs)
+            revision = model_revision.strip()
+            if revision:
+                model = SentenceTransformer(model_name, revision=revision)
+            else:
+                model = SentenceTransformer(model_name)
             sample = model.encode(["dimension_probe"], normalize_embeddings=True)
             if len(sample) > 0:
                 self._dimensions = len(sample[0])

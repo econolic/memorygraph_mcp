@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-from collections.abc import Iterator
-from typing import TYPE_CHECKING
+from collections.abc import Iterator, Mapping, Sequence
+from typing import TYPE_CHECKING, Any
 import uuid
 
 if TYPE_CHECKING:
@@ -11,9 +11,12 @@ if TYPE_CHECKING:
 
 
 request_id_var: ContextVar[str] = ContextVar("request_id", default="")
+SpanAttributeValue = (
+    str | bool | int | float | Sequence[str] | Sequence[bool] | Sequence[int] | Sequence[float]
+)
 
 _tracing_enabled = False
-_tracer = None
+_tracer: Any | None = None
 _tracing_initialized = False
 
 
@@ -38,12 +41,12 @@ def setup_tracing(cfg: "AppConfig") -> bool:
         return False
 
     try:
-        from opentelemetry import trace  # type: ignore[import-not-found]
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter as OTLPGrpcSpanExporter  # type: ignore[import-not-found]
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter as OTLPHttpSpanExporter  # type: ignore[import-not-found]
-        from opentelemetry.sdk.resources import Resource  # type: ignore[import-not-found]
-        from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-not-found]
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor  # type: ignore[import-not-found]
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter as OTLPGrpcSpanExporter
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter as OTLPHttpSpanExporter
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
     except Exception:
         _tracing_enabled = False
         return False
@@ -53,19 +56,21 @@ def setup_tracing(cfg: "AppConfig") -> bool:
     resource = Resource.create({"service.name": cfg.service_name})
     provider = TracerProvider(resource=resource)
 
-    exporter = None
+    exporter: Any
     try:
         if protocol == "grpc":
-            kwargs: dict[str, object] = {}
             if endpoint:
-                kwargs["endpoint"] = endpoint
-                kwargs["insecure"] = endpoint.startswith("http://")
-            exporter = OTLPGrpcSpanExporter(**kwargs)
+                exporter = OTLPGrpcSpanExporter(
+                    endpoint=endpoint,
+                    insecure=endpoint.startswith("http://"),
+                )
+            else:
+                exporter = OTLPGrpcSpanExporter()
         else:
-            kwargs = {}
             if endpoint:
-                kwargs["endpoint"] = endpoint
-            exporter = OTLPHttpSpanExporter(**kwargs)
+                exporter = OTLPHttpSpanExporter(endpoint=endpoint)
+            else:
+                exporter = OTLPHttpSpanExporter()
     except Exception:
         _tracing_enabled = False
         return False
@@ -78,7 +83,11 @@ def setup_tracing(cfg: "AppConfig") -> bool:
 
 
 @contextmanager
-def start_span(name: str, *, attributes: dict[str, object] | None = None) -> Iterator[object | None]:
+def start_span(
+    name: str,
+    *,
+    attributes: Mapping[str, SpanAttributeValue] | None = None,
+) -> Iterator[object | None]:
     if not _tracing_enabled or _tracer is None:
         yield None
         return

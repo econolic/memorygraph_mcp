@@ -19,7 +19,7 @@ class CrossEncoderReranker:
     def __init__(self) -> None:
         self._model = None
         try:
-            from sentence_transformers import CrossEncoder  # type: ignore[import-not-found]
+            from sentence_transformers import CrossEncoder
 
             self._model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
         except Exception:
