@@ -85,13 +85,15 @@ class IngestionPipeline:
         workspace_id: str,
         acl_allow: list[str],
         since_ref: str = "HEAD~1",
-    ) -> dict[str, int]:
+        dry_run: bool = False,
+    ) -> dict[str, object]:
         changed_files = self._git.changed_files(repo_root=root, since_ref=since_ref)
         return self.ingest_filesystem(
             root=root,
             workspace_id=workspace_id,
             acl_allow=acl_allow,
             changed_files=changed_files,
+            dry_run=dry_run,
         )
 
     def ingest_filesystem(
@@ -101,11 +103,13 @@ class IngestionPipeline:
         workspace_id: str,
         acl_allow: list[str],
         changed_files: list[str] | None = None,
-    ) -> dict[str, int]:
+        dry_run: bool = False,
+    ) -> dict[str, object]:
         changed_set = None if changed_files is None else {str(Path(path).resolve()) for path in changed_files}
         docs = self._filesystem.read_documents(root, include_paths=changed_set)
         created = 0
         updated = 0
+        skipped = 0
 
         for doc in docs:
             source_path = str(doc.get("source_path", ""))
@@ -115,10 +119,18 @@ class IngestionPipeline:
             tags_raw = doc.get("tags", [])
             tags = [str(v) for v in tags_raw] if isinstance(tags_raw, list) else []
             if not source_path or not text:
+                skipped += 1
                 continue
             checksum = self._checksum(text)
             prev = self._metadata.get_checksum(workspace_id=workspace_id, source_path=source_path)
             if prev == checksum:
+                skipped += 1
+                continue
+            if dry_run:
+                if prev is None:
+                    created += 1
+                else:
+                    updated += 1
                 continue
 
             doc_id, doc_uri = self._choose_doc_identity(workspace_id=workspace_id, source_path=source_path)
@@ -235,4 +247,4 @@ class IngestionPipeline:
                 updated += 1
             self._metadata.set_checksum(workspace_id=workspace_id, source_path=source_path, checksum=checksum)
 
-        return {"created": created, "updated": updated}
+        return {"created": created, "updated": updated, "skipped": skipped, "dry_run": dry_run}

@@ -12,9 +12,7 @@ This repository targets an **open-source self-hosted** Hybrid KB MCP server. Con
 ## Local Setup
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .[dev,rerank]
+.venv/bin/python -m pip install -e .[dev,rerank]
 cp .env.example .env
 ```
 
@@ -25,15 +23,15 @@ For local-only development, keep `KB_HTTP_HOST=127.0.0.1`.
 Run before opening a PR:
 
 ```bash
-ruff check .
-mypy kb_mcp
-pytest -s
+make check-fast
 ```
 
-If your environment needs explicit import path for ad-hoc tests:
+Direct equivalent:
 
 ```bash
-PYTHONPATH=. pytest -s tests/test_router.py
+.venv/bin/ruff check .
+.venv/bin/python -m mypy kb_mcp
+.venv/bin/python -m pytest -q -m "not docker and not benchmark and not external"
 ```
 
 ## Docker E2E / Self-Hosted Smoke
@@ -51,10 +49,17 @@ cp .env.selfhosted.example .env
 ./scripts/release_selfhosted_smoke.sh
 ```
 
+Minimal JSON-RPC smoke against a running HTTP MCP endpoint:
+
+```bash
+python3 scripts/jsonrpc_smoke.py --token "$TOKEN"
+```
+
 ## PR Guidelines
 
 - Keep changes scoped and explain tradeoffs in PR description.
 - Add or update tests for behavioral changes.
+- Mark slow or external checks with `docker`, `benchmark`, or `external` pytest markers.
 - Update docs when runtime/config/user behavior changes.
 - Call out security impact (auth/ACL/transport/storage) explicitly.
 - Mention benchmark impact for retrieval changes (quality/latency/fusion/rerank/entity resolution).

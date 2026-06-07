@@ -12,6 +12,22 @@ from kb_mcp.ingest.pipeline import IngestionPipeline
 logger = logging.getLogger(__name__)
 
 
+def _result_counter(result: dict[str, object], key: str) -> int:
+    value = result.get(key, 0)
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+    return 0
+
+
 class AutoIngestDeps(Protocol):
     @property
     def config(self) -> AppConfig: ...
@@ -80,8 +96,8 @@ class AutoIngestService:
                     method=method,
                     reason=reason,
                 )
-                summary["created"] += int(result.get("created", 0))
-                summary["updated"] += int(result.get("updated", 0))
+                summary["created"] += _result_counter(result, "created")
+                summary["updated"] += _result_counter(result, "updated")
                 summary["processed_roots"] += 1
                 if method == "git_diff":
                     summary["git_diff_roots"] += 1
@@ -108,7 +124,7 @@ class AutoIngestService:
             metrics.observe("auto_ingest.cycle.latency_ms", (perf_counter() - t0) * 1000.0)
         return summary
 
-    def _ingest_root(self, *, root: Path, method: str, reason: str) -> tuple[dict[str, int], int]:
+    def _ingest_root(self, *, root: Path, method: str, reason: str) -> tuple[dict[str, object], int]:
         max_attempts = max(1, int(self._cfg.auto_ingest_retry_attempts))
         base_backoff = max(0.1, float(self._cfg.auto_ingest_retry_backoff_s))
         last_error: Exception | None = None

@@ -5,6 +5,23 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+ErrorCode = Literal[
+    "VALIDATION_ERROR",
+    "NOT_FOUND",
+    "PERMISSION_DENIED",
+    "TIMEOUT",
+    "UPSTREAM_UNAVAILABLE",
+    "CONFLICT",
+    "UNKNOWN_ERROR",
+]
+
+
+class ContractFields(BaseModel):
+    ok: bool = True
+    error_code: ErrorCode | None = None
+    error_detail: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+
 
 class AclSubject(BaseModel):
     subject: str = "anonymous"
@@ -78,7 +95,7 @@ class MemoryHit(BaseModel):
     citations: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class KbSearchOutput(BaseModel):
+class KbSearchOutput(ContractFields):
     query_id: str
     results: list[SearchResult]
     memory_hits: list[MemoryHit] = Field(default_factory=list)
@@ -95,7 +112,7 @@ class KbGraphExpandInput(BaseModel):
     subject: str = ""
 
 
-class KbGraphExpandOutput(BaseModel):
+class KbGraphExpandOutput(ContractFields):
     nodes: list[dict[str, Any]] = Field(default_factory=list)
     edges: list[dict[str, str]] = Field(default_factory=list)
     paths: list[list[str]] = Field(default_factory=list)
@@ -107,7 +124,7 @@ class KbExplainInput(BaseModel):
     subject: str = ""
 
 
-class KbExplainOutput(BaseModel):
+class KbExplainOutput(ContractFields):
     explanations: list[dict[str, Any]] = Field(default_factory=list)
 
 
@@ -126,7 +143,7 @@ class KbMemoryUpsertInput(BaseModel):
     items: list[MemoryUpsertItem]
 
 
-class KbMemoryUpsertOutput(BaseModel):
+class KbMemoryUpsertOutput(ContractFields):
     stored_ids: list[str]
     validation_report: dict[str, list[str]] = Field(default_factory=dict)
 
@@ -139,7 +156,7 @@ class KbMemorySearchInput(BaseModel):
     top_k: int = 10
 
 
-class KbMemorySearchOutput(BaseModel):
+class KbMemorySearchOutput(ContractFields):
     results: list[MemoryHit]
 
 
@@ -150,7 +167,7 @@ class KbMemoryDeleteInput(BaseModel):
     all_for_subject: bool = False
 
 
-class KbMemoryDeleteOutput(BaseModel):
+class KbMemoryDeleteOutput(ContractFields):
     deleted_count: int
 
 
@@ -167,7 +184,7 @@ class KbRoutePlanStep(BaseModel):
     required: bool = True
 
 
-class KbRouteOutput(BaseModel):
+class KbRouteOutput(ContractFields):
     policy_version: str
     intent: Literal["fact_lookup", "relation_impact", "explainability", "memory_context", "memory_delete"]
     mode: Literal["vector", "graph", "hybrid"]
@@ -175,3 +192,21 @@ class KbRouteOutput(BaseModel):
     recommended_tools: list[str] = Field(default_factory=list)
     execution_plan: list[KbRoutePlanStep] = Field(default_factory=list)
     constraints: dict[str, Any] = Field(default_factory=dict)
+
+
+class KbIngestOutput(ContractFields):
+    created: int = 0
+    updated: int = 0
+    skipped: int = 0
+    dry_run: bool = False
+
+
+class KbHealthOutput(ContractFields):
+    service_name: str
+    transport: Literal["mcp"]
+    auth_mode: str
+    backends: dict[str, str]
+    tools: list[str]
+    resources: list[str]
+    prompts: list[str]
+    config: dict[str, Any] = Field(default_factory=dict)

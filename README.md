@@ -4,10 +4,13 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
 
 ## What This Project Provides
 
-- MCP tools: `kb.route`, `kb.search`, `kb.graph_expand`, `kb.explain`
+- MCP tools: `kb.health`, `kb.route`, `kb.search`, `kb.graph_expand`, `kb.explain`
 - Memory tools: `kb.memory.upsert`, `kb.memory.search`, `kb.memory.delete`
 - Ingestion tools: `kb.ingest.filesystem`, `kb.ingest.git_diff`
-- ACL-protected resources: `kb://doc/*`, `kb://chunk/*`, `kb://entity/*`, `kb://memory/*`
+- ACL-protected resources: `kb://doc/*`, `kb://chunk/*`, `kb://entity/*`, `kb://memory/*`,
+  `kb://policy/tool-selection`
+- MCP prompts: `kb.answer_with_citations`, `kb.tool_selection_policy`,
+  `kb.incident_triage`, `kb.memory_grounded_reply`
 - Hybrid retrieval (vector + graph + rerank) with fallback behavior
 - Metadata persistence (`sqlite` default, `postgres` optional, `memory` for tests/dev)
 - Runtime feature flags for retrieval quality:
@@ -32,6 +35,7 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
 ## Tool Descriptions (User View)
 
 - `kb.search`: find relevant knowledge snippets with citations.
+- `kb.health`: return read-only runtime health/config surface without secrets.
 - `kb.route`: return intent + recommended tools + execution plan (no client-side guessing).
 - `kb.graph_expand`: show entity relations, dependency chains, and impact paths.
 - `kb.explain`: explain why retrieved results are relevant.
@@ -40,6 +44,38 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
 - `kb.memory.delete`: delete saved memory by IDs or all memory for a subject.
 - `kb.ingest.filesystem`: ingest knowledge from a folder (full scan with incremental updates).
 - `kb.ingest.git_diff`: ingest only files changed in git diff (faster incremental refresh).
+
+## MCP Contract Surface
+
+All typed tool outputs include additive contract fields while preserving legacy fields:
+
+- `ok`: boolean success marker.
+- `error_code`: one of `VALIDATION_ERROR`, `NOT_FOUND`, `PERMISSION_DENIED`, `TIMEOUT`,
+  `UPSTREAM_UNAVAILABLE`, `CONFLICT`, `UNKNOWN_ERROR`, or `null`.
+- `error_detail`: short model-readable error detail, or `null`.
+- `meta`: operational metadata such as `latency_ms`, `request_id`, or policy version.
+
+Compatibility notes:
+
+- Existing fields such as `results`, `stored_ids`, `created`, `updated`, and resource
+  `error: "forbidden"` are kept.
+- Strict HTTP auth failures still return MCP tool execution errors (`isError: true`) instead of
+  soft `ok=false` payloads.
+- Ingestion tools are privileged side-effecting tools. They enforce `KB_INGEST_ALLOWED_ROOTS`
+  and support `dry_run=true`.
+
+| Tool | Side effects | Risk | Notes |
+|---|---:|---|---|
+| `kb.health` | no | Low | Runtime status, no secrets |
+| `kb.route` | no | Low | Router-first plan |
+| `kb.search` | no | Low | Retrieval + citations |
+| `kb.graph_expand` | no | Low | Graph expansion |
+| `kb.explain` | no | Low | Relevance reasons |
+| `kb.memory.search` | no | Low | Subject/workspace-scoped reads |
+| `kb.memory.upsert` | yes | Medium | Requires validated citations/confidence |
+| `kb.memory.delete` | yes | High | Deletes subject/workspace memory |
+| `kb.ingest.filesystem` | yes | High | Root must be in `KB_INGEST_ALLOWED_ROOTS`; supports `dry_run` |
+| `kb.ingest.git_diff` | yes | High | Root must be in `KB_INGEST_ALLOWED_ROOTS`; supports `dry_run` |
 
 ## Documentation Map
 
@@ -110,6 +146,28 @@ Notes:
 
 - HTTP MCP: `http://127.0.0.1:8080/mcp`
 - Stdio entrypoint: `python -m kb_mcp.server.transport_stdio`
+
+Minimal HTTP health check through MCP JSON-RPC:
+
+```bash
+curl -sS http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H "Authorization: Bearer ${TOKEN}" \
+  -d '{"jsonrpc":"2.0","id":"health","method":"tools/call","params":{"name":"kb.health","arguments":{}}}'
+```
+
+Expected `structuredContent` shape:
+
+```json
+{
+  "ok": true,
+  "service_name": "hybrid-kb-mcp",
+  "auth_mode": "strict",
+  "backends": {"vector": "qdrant", "graph": "neo4j", "metadata": "sqlite"},
+  "tools": ["kb.health", "kb.route", "kb.search"]
+}
+```
 
 ## Route Wrapper (Client-Side)
 
@@ -255,6 +313,7 @@ Practical implications when switching agents/sessions:
 - Optional strict OAuth settings:
   - `KB_OAUTH_ISSUER_URL`, `KB_OAUTH_AUDIENCE`, `KB_OAUTH_JWKS_URL`, `KB_OAUTH_REQUIRED_SCOPES`
 - Auto-ingest hardening controls:
+  - `KB_INGEST_ALLOWED_ROOTS` (comma-separated resolved allowlist; defaults to `KB_AUTO_INGEST_ROOTS`)
   - `KB_AUTO_INGEST_FULL_INTERVAL_CYCLES`
   - `KB_AUTO_INGEST_GIT_SINCE_REF`
   - `KB_AUTO_INGEST_RETRY_ATTEMPTS`
@@ -309,6 +368,22 @@ Bottom line:
 
 ## Benchmark Commands
 
+Fast local readiness gate:
+
+```bash
+make install-dev
+make check-fast
+```
+
+Direct equivalent:
+
+```bash
+.venv/bin/python -m pip install -e .[dev,rerank]
+.venv/bin/ruff check .
+.venv/bin/python -m mypy kb_mcp
+.venv/bin/python -m pytest -q -m "not docker and not benchmark and not external"
+```
+
 ```bash
 python3 bench/run_benchmark.py --top-k 10 --enforce-gates \
   --metadata-dsn sqlite:///./.kb_mcp/bench_metadata_no_rerank.db \
@@ -339,7 +414,7 @@ cp .env.selfhosted.example .env
 
 What it checks (baseline):
 
-- `tools/list`, `kb.route`, `kb.search`
+- `tools/list`, `kb.health`, `kb.route`, `kb.search`
 - ingestion + citations
 - wrapper (`kb.route` + `execution_plan`)
 - memory lifecycle (`upsert/search/delete`)

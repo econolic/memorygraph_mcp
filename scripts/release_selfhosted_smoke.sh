@@ -7,9 +7,11 @@ cd "${ROOT_DIR}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.selfhosted.yml}"
 ENV_FILE="${ENV_FILE:-.env}"
 MCP_URL="${MCP_URL:-http://127.0.0.1:8080/mcp}"
-WORKSPACE_ID="${WORKSPACE_ID:-w1}"
+RUN_ID="${RUN_ID:-$(date +%s)}"
+WORKSPACE_ID="${WORKSPACE_ID:-smoke-${RUN_ID}}"
 SUBJECT_ID="${SUBJECT_ID:-u1}"
-SESSION_ID="${SESSION_ID:-release-smoke}"
+SESSION_ID="${SESSION_ID:-release-smoke-${RUN_ID}}"
+SMOKE_INGEST_ROOT="${SMOKE_INGEST_ROOT:-/app/kb_mcp/server}"
 
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "Missing ${ENV_FILE}. Copy .env.selfhosted.example to .env and fill secrets first." >&2
@@ -24,8 +26,13 @@ if ! command -v curl >/dev/null 2>&1; then
   echo "curl is required" >&2
   exit 1
 fi
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 is required" >&2
+if [[ -z "${PYTHON_BIN:-}" && -x ".venv/bin/python" ]]; then
+  PYTHON_BIN=".venv/bin/python"
+else
+  PYTHON_BIN="${PYTHON_BIN:-python3}"
+fi
+if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
+  echo "python is required; set PYTHON_BIN or create .venv" >&2
   exit 1
 fi
 
@@ -36,6 +43,8 @@ source "${ENV_FILE}"
 set +a
 
 export KB_AUTH_MODE="${KB_AUTH_MODE:-strict}"
+export KB_AUTO_INGEST_ENABLED=false
+export KB_AUTO_INGEST_RUN_ON_START=false
 if [[ "${KB_AUTH_MODE}" != "strict" ]]; then
   echo "This smoke script expects KB_AUTH_MODE=strict in ${ENV_FILE}. Current: ${KB_AUTH_MODE}" >&2
   exit 1
@@ -66,7 +75,7 @@ jsonrpc() {
 make_token() {
   local sub="$1"
   local workspace="$2"
-  python3 - <<'PY' "${sub}" "${workspace}"
+  "${PYTHON_BIN}" - <<'PY' "${sub}" "${workspace}"
 import os
 import sys
 try:
@@ -87,7 +96,7 @@ wait_for_mcp() {
   for attempt in $(seq 1 60); do
     local response
     response="$(jsonrpc '{"jsonrpc":"2.0","id":"tools","method":"tools/list","params":{}}' "${token}" || true)"
-    if python3 - <<'PY' "${response}"
+    if "${PYTHON_BIN}" - <<'PY' "${response}"
 import json, sys
 raw = sys.argv[1]
 try:
@@ -116,25 +125,34 @@ docker compose -f "${COMPOSE_FILE}" up -d --build
 echo "[2/10] Waiting for MCP endpoint"
 wait_for_mcp "${TOKEN}"
 
-echo "[3/10] Verifying tools/list and kb.route availability"
+echo "[3/10] Verifying tools/list, kb.health and kb.route availability"
 TOOLS_JSON="$(jsonrpc '{"jsonrpc":"2.0","id":"tools","method":"tools/list","params":{}}' "${TOKEN}")"
-python3 - <<'PY' "${TOOLS_JSON}"
+"${PYTHON_BIN}" - <<'PY' "${TOOLS_JSON}"
 import json, sys
 data = json.loads(sys.argv[1])
 tools = {t["name"] for t in data["result"]["tools"]}
-required = {"kb.route", "kb.search", "kb.memory.upsert", "kb.memory.search", "kb.memory.delete", "kb.ingest.filesystem"}
+required = {"kb.health", "kb.route", "kb.search", "kb.memory.upsert", "kb.memory.search", "kb.memory.delete", "kb.ingest.filesystem"}
 missing = sorted(required - tools)
 if missing:
     raise SystemExit(f"Missing tools: {missing}")
 print("tools ok")
 PY
+HEALTH_JSON="$(jsonrpc '{"jsonrpc":"2.0","id":"health","method":"tools/call","params":{"name":"kb.health","arguments":{}}}' "${TOKEN}")"
+"${PYTHON_BIN}" - <<'PY' "${HEALTH_JSON}"
+import json, sys
+data = json.loads(sys.argv[1])
+payload = data["result"].get("structuredContent", {})
+if payload.get("ok") is not True:
+    raise SystemExit(f"kb.health not ok: {data}")
+print("health ok")
+PY
 
-echo "[4/10] Ingesting repo source path (/app/kb_mcp)"
+echo "[4/10] Ingesting smoke source path (${SMOKE_INGEST_ROOT})"
 INGEST_JSON="$(jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"ingest","method":"tools/call","params":{"name":"kb.ingest.filesystem","arguments":{"root_path":"/app/kb_mcp","workspace_id":"${WORKSPACE_ID}","acl_subject":"${SUBJECT_ID}"}}}
+{"jsonrpc":"2.0","id":"ingest","method":"tools/call","params":{"name":"kb.ingest.filesystem","arguments":{"root_path":"${SMOKE_INGEST_ROOT}","workspace_id":"${WORKSPACE_ID}","acl_subject":"${SUBJECT_ID}"}}}
 JSON
 )" "${TOKEN}")"
-python3 - <<'PY' "${INGEST_JSON}"
+"${PYTHON_BIN}" - <<'PY' "${INGEST_JSON}"
 import json, sys
 data = json.loads(sys.argv[1])
 if "error" in data:
@@ -147,10 +165,10 @@ PY
 
 echo "[5/10] Search with citations"
 SEARCH_JSON="$(jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"search","method":"tools/call","params":{"name":"kb.search","arguments":{"payload":{"query":"Hybrid Retrieval MCP server", "mode":"hybrid","top_k":5,"workspace_id":"${WORKSPACE_ID}","session_id":"${SESSION_ID}","include_memory":false,"filters":{"acl":{"subject":"${SUBJECT_ID}","workspace_id":"${WORKSPACE_ID}","roles":[]}},"graph":{"expand_depth":1,"edge_types":[],"max_nodes":50},"rerank":{"enabled":false,"provider":"cross_encoder","top_n":5}}}}}
+{"jsonrpc":"2.0","id":"search","method":"tools/call","params":{"name":"kb.search","arguments":{"payload":{"query":"kb.health REGISTERED_TOOLS", "mode":"hybrid","top_k":5,"workspace_id":"${WORKSPACE_ID}","session_id":"${SESSION_ID}","include_memory":false,"filters":{"acl":{"subject":"${SUBJECT_ID}","workspace_id":"${WORKSPACE_ID}","roles":[]}},"graph":{"expand_depth":1,"edge_types":[],"max_nodes":50},"rerank":{"enabled":false,"provider":"cross_encoder","top_n":5}}}}}
 JSON
 )" "${TOKEN}")"
-TOP_URI="$(python3 - <<'PY' "${SEARCH_JSON}"
+TOP_URI="$("${PYTHON_BIN}" - <<'PY' "${SEARCH_JSON}"
 import json, sys
 data = json.loads(sys.argv[1])
 res = data["result"]
@@ -176,7 +194,7 @@ if [[ -z "${TOP_URI}" ]]; then
   echo "Search did not return a resource URI" >&2
   exit 1
 fi
-TOP_CITATION_JSON="$(python3 - <<'PY' "${SEARCH_JSON}"
+TOP_CITATION_JSON="$("${PYTHON_BIN}" - <<'PY' "${SEARCH_JSON}"
 import json, sys
 data = json.loads(sys.argv[1])
 res = data["result"]
@@ -201,14 +219,14 @@ PY
 )"
 
 echo "[6/10] Route wrapper flow (HTTP)"
-python3 ./scripts/kb_route_wrapper.py --transport http --token "${TOKEN}" "Какие связи есть у kb.route в проекте?" >/dev/null
+"${PYTHON_BIN}" ./scripts/kb_route_wrapper.py --transport http --token "${TOKEN}" "Какие связи есть у kb.route в проекте?" >/dev/null
 
 echo "[7/10] Memory lifecycle (upsert/search/delete)"
 UPSERT_JSON="$(jsonrpc "$(cat <<JSON
 {"jsonrpc":"2.0","id":"mem-upsert","method":"tools/call","params":{"name":"kb.memory.upsert","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","session_id":"${SESSION_ID}","items":[{"type":"decision","text":"Release smoke confirms strict self-hosted baseline","confidence":0.95,"citations":[${TOP_CITATION_JSON}]}]}}}}
 JSON
 )" "${TOKEN}")"
-MEMORY_ID="$(python3 - <<'PY' "${UPSERT_JSON}"
+MEMORY_ID="$("${PYTHON_BIN}" - <<'PY' "${UPSERT_JSON}"
 import json, sys
 data = json.loads(sys.argv[1])
 res = data["result"]
@@ -244,7 +262,7 @@ DENY_JSON="$(jsonrpc "$(cat <<JSON
 {"jsonrpc":"2.0","id":"resource-deny","method":"resources/read","params":{"uri":"${TOP_URI}"}} 
 JSON
 )" "${FOREIGN_TOKEN}")"
-python3 - <<'PY' "${DENY_JSON}"
+"${PYTHON_BIN}" - <<'PY' "${DENY_JSON}"
 import json, sys
 data = json.loads(sys.argv[1])
 payload = data.get("result", {})
@@ -265,7 +283,7 @@ PERSIST_UPSERT_JSON="$(jsonrpc "$(cat <<JSON
 {"jsonrpc":"2.0","id":"persist-upsert","method":"tools/call","params":{"name":"kb.memory.upsert","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","session_id":"${SESSION_ID}","items":[{"type":"decision","text":"Persistence smoke marker","confidence":0.95,"citations":[${TOP_CITATION_JSON}]}]}}}}
 JSON
 )" "${TOKEN}")"
-PERSIST_ID="$(python3 - <<'PY' "${PERSIST_UPSERT_JSON}"
+PERSIST_ID="$("${PYTHON_BIN}" - <<'PY' "${PERSIST_UPSERT_JSON}"
 import json, sys
 data = json.loads(sys.argv[1])
 res = data["result"]
@@ -290,7 +308,7 @@ PERSIST_SEARCH_JSON="$(jsonrpc "$(cat <<JSON
 {"jsonrpc":"2.0","id":"persist-search","method":"tools/call","params":{"name":"kb.memory.search","arguments":{"payload":{"query":"Persistence smoke marker","workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","session_id":"${SESSION_ID}","top_k":5}}}}
 JSON
 )" "${TOKEN}")"
-python3 - <<'PY' "${PERSIST_SEARCH_JSON}" "${PERSIST_ID}"
+"${PYTHON_BIN}" - <<'PY' "${PERSIST_SEARCH_JSON}" "${PERSIST_ID}"
 import json, sys
 data = json.loads(sys.argv[1])
 expected = sys.argv[2]

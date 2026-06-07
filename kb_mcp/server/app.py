@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, cast
 
@@ -22,15 +23,17 @@ from kb_mcp.server.schemas import (
     KbExplainOutput,
     KbGraphExpandInput,
     KbGraphExpandOutput,
+    KbHealthOutput,
+    KbIngestOutput,
     KbMemoryDeleteInput,
     KbMemoryDeleteOutput,
-    KbRouteInput,
-    KbRouteOutput,
-    KbRoutePlanStep,
     KbMemorySearchInput,
     KbMemorySearchOutput,
     KbMemoryUpsertInput,
     KbMemoryUpsertOutput,
+    KbRouteInput,
+    KbRouteOutput,
+    KbRoutePlanStep,
     KbSearchInput,
     KbSearchOutput,
     MemoryHit,
@@ -54,6 +57,34 @@ RUNTIME_TOOL_POLICY_PROMPT = """Ты работаешь с MCP tools базы з
 Для удаления памяти используй только kb.memory.delete.
 Не выдумывай источники: если evidence нет, явно сообщи это.
 Если graph недоступен, деградируй на vector evidence и укажи ограничение."""
+
+REGISTERED_TOOLS = [
+    "kb.health",
+    "kb.route",
+    "kb.search",
+    "kb.graph_expand",
+    "kb.explain",
+    "kb.memory.upsert",
+    "kb.memory.search",
+    "kb.memory.delete",
+    "kb.ingest.filesystem",
+    "kb.ingest.git_diff",
+]
+
+REGISTERED_RESOURCES = [
+    "kb://doc/{doc_id}",
+    "kb://chunk/{chunk_id}",
+    "kb://entity/{entity_id}",
+    "kb://memory/{memory_id}",
+    "kb://policy/tool-selection",
+]
+
+REGISTERED_PROMPTS = [
+    "kb.answer_with_citations",
+    "kb.tool_selection_policy",
+    "kb.incident_triage",
+    "kb.memory_grounded_reply",
+]
 
 
 def _request_from_ctx(ctx: FastContext | None) -> Any | None:
@@ -109,6 +140,50 @@ def _resource_server_url(*, host: str, port: int) -> str:
     if ":" in normalized and not normalized.startswith("["):
         normalized = f"[{normalized}]"
     return f"http://{normalized}:{port}"
+
+
+def _contract_ok(data: dict[str, Any]) -> dict[str, Any]:
+    out = dict(data)
+    out.setdefault("ok", True)
+    out.setdefault("error_code", None)
+    out.setdefault("error_detail", None)
+    out.setdefault("meta", {})
+    return out
+
+
+def _contract_error(*, uri: str, legacy_error: str, error_code: str, detail: str) -> dict[str, Any]:
+    return {
+        "error": legacy_error,
+        "uri": uri,
+        "ok": False,
+        "error_code": error_code,
+        "error_detail": detail,
+        "meta": {},
+    }
+
+
+def _result_int(result: dict[str, object], key: str) -> int:
+    value = result.get(key, 0)
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return 0
+
+
+def _path_allowed(path: str, allowed_roots: tuple[str, ...]) -> tuple[bool, str]:
+    resolved = Path(path).expanduser().resolve()
+    if not allowed_roots:
+        return True, str(resolved)
+    for root in allowed_roots:
+        allowed = Path(root).expanduser().resolve()
+        if resolved == allowed or allowed in resolved.parents:
+            return True, str(resolved)
+    return False, str(resolved)
 
 
 def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
@@ -241,6 +316,35 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
             )
         ]
 
+    @mcp.tool(name="kb.health")
+    def kb_health(ctx: FastContext | None = None) -> KbHealthOutput:
+        _ = ctx
+        return KbHealthOutput(
+            service_name=cfg.service_name,
+            transport="mcp",
+            auth_mode=cfg.auth_mode,
+            backends={
+                "vector": cfg.vector_backend,
+                "graph": cfg.graph_backend,
+                "metadata": cfg.metadata_backend,
+                "embedding": cfg.embedding_provider,
+            },
+            tools=list(REGISTERED_TOOLS),
+            resources=list(REGISTERED_RESOURCES),
+            prompts=list(REGISTERED_PROMPTS),
+            config={
+                "http_host": cfg.http_host,
+                "http_port": cfg.http_port,
+                "transport_security_enabled": cfg.transport_security_enabled,
+                "graph_enforce_object_acl": cfg.graph_enforce_object_acl,
+                "auto_ingest_enabled": cfg.auto_ingest_enabled,
+                "ingest_allowed_roots": list(cfg.ingest_allowed_roots),
+                "max_top_k": cfg.max_top_k,
+                "max_expand_depth": cfg.max_expand_depth,
+            },
+            meta={"policy_version": POLICY_VERSION},
+        )
+
     @mcp.tool(name="kb.route")
     def kb_route(payload: KbRouteInput, ctx: FastContext | None = None) -> KbRouteOutput:
         t0 = perf_counter()
@@ -272,6 +376,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         )
         deps.metrics.inc("tool.kb.route.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
+        out.meta = {"latency_ms": latency_ms, "policy_version": POLICY_VERSION}
         deps.metrics.observe("tool.kb.route.latency_ms", latency_ms)
         audit_tool(
             auth=auth,
@@ -404,6 +509,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
 
         deps.metrics.inc("tool.kb.search.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
+        output.meta = {"latency_ms": latency_ms, "request_id": request_id}
         deps.metrics.observe("tool.kb.search.latency_ms", latency_ms)
         for stage, value_ms in debug.latency_ms.items():
             deps.metrics.observe("retrieval.stage.latency_ms", value_ms, labels={"stage": stage})
@@ -442,6 +548,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         )
         deps.metrics.inc("tool.kb.graph_expand.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
+        out.meta = {"latency_ms": latency_ms}
         deps.metrics.observe("tool.kb.graph_expand.latency_ms", latency_ms)
         audit_tool(
             auth=auth,
@@ -480,7 +587,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
             latency_ms=latency_ms,
             acl_decision="applied",
         )
-        return KbExplainOutput(explanations=explanations)
+        return KbExplainOutput(explanations=explanations, meta={"latency_ms": latency_ms})
 
     @mcp.tool(name="kb.memory.upsert")
     def kb_memory_upsert(payload: KbMemoryUpsertInput, ctx: FastContext | None = None) -> KbMemoryUpsertOutput:
@@ -503,7 +610,11 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
             latency_ms=latency_ms,
             acl_decision="applied",
         )
-        return KbMemoryUpsertOutput(stored_ids=stored_ids, validation_report=report)
+        return KbMemoryUpsertOutput(
+            stored_ids=stored_ids,
+            validation_report=report,
+            meta={"latency_ms": latency_ms},
+        )
 
     @mcp.tool(name="kb.memory.search")
     def kb_memory_search(payload: KbMemorySearchInput, ctx: FastContext | None = None) -> KbMemorySearchOutput:
@@ -530,7 +641,8 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
             results=[
                 MemoryHit(uri=hit.uri, score=hit.score, text=deps.redact.redact(hit.text), citations=hit.citations)
                 for hit in hits
-            ]
+            ],
+            meta={"latency_ms": latency_ms},
         )
 
     @mcp.tool(name="kb.memory.delete")
@@ -554,21 +666,50 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
             latency_ms=latency_ms,
             acl_decision="applied",
         )
-        return KbMemoryDeleteOutput(deleted_count=deleted)
+        return KbMemoryDeleteOutput(deleted_count=deleted, meta={"latency_ms": latency_ms})
 
     @mcp.tool(name="kb.ingest.filesystem")
     def kb_ingest_filesystem(
         root_path: str,
         workspace_id: str,
         acl_subject: str,
+        dry_run: bool = False,
         ctx: FastContext | None = None,
-    ) -> dict[str, int]:
+    ) -> KbIngestOutput:
         t0 = perf_counter()
         auth = resolve_identity(_legacy_acl(workspace_id=workspace_id, subject=acl_subject), ctx)
+        allowed, resolved_root = _path_allowed(root_path, cfg.ingest_allowed_roots)
+        if not allowed:
+            latency_ms = int((perf_counter() - t0) * 1000)
+            audit_tool(
+                auth=auth,
+                tool="kb.ingest.filesystem",
+                params={
+                    "root_path": root_path,
+                    "workspace_id": workspace_id,
+                    "acl_subject": acl_subject,
+                    "dry_run": dry_run,
+                },
+                result_count=0,
+                latency_ms=latency_ms,
+                acl_decision="denied",
+            )
+            return KbIngestOutput(
+                ok=False,
+                error_code="PERMISSION_DENIED",
+                error_detail=f"Ingestion root is outside KB_INGEST_ALLOWED_ROOTS: {resolved_root}",
+                dry_run=dry_run,
+                meta={
+                    "latency_ms": latency_ms,
+                    "resolved_root": resolved_root,
+                    "allowed_roots": list(cfg.ingest_allowed_roots),
+                },
+            )
         result = deps.ingestion.ingest_filesystem(
             root=root_path,
             workspace_id=auth.ctx.workspace_id,
             acl_allow=[auth.ctx.subject],
+            dry_run=dry_run,
         )
         deps.metrics.inc("tool.kb.ingest.filesystem.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
@@ -576,12 +717,23 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         audit_tool(
             auth=auth,
             tool="kb.ingest.filesystem",
-            params={"root_path": root_path, "workspace_id": workspace_id, "acl_subject": acl_subject},
-            result_count=result.get("created", 0) + result.get("updated", 0),
+            params={
+                "root_path": root_path,
+                "workspace_id": workspace_id,
+                "acl_subject": acl_subject,
+                "dry_run": dry_run,
+            },
+            result_count=_result_int(result, "created") + _result_int(result, "updated"),
             latency_ms=latency_ms,
             acl_decision="applied",
         )
-        return result
+        return KbIngestOutput(
+            created=_result_int(result, "created"),
+            updated=_result_int(result, "updated"),
+            skipped=_result_int(result, "skipped"),
+            dry_run=bool(result.get("dry_run", dry_run)),
+            meta={"latency_ms": latency_ms, "resolved_root": resolved_root},
+        )
 
     @mcp.tool(name="kb.ingest.git_diff")
     def kb_ingest_git_diff(
@@ -589,15 +741,45 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
         workspace_id: str,
         acl_subject: str,
         since_ref: str = "HEAD~1",
+        dry_run: bool = False,
         ctx: FastContext | None = None,
-    ) -> dict[str, int]:
+    ) -> KbIngestOutput:
         t0 = perf_counter()
         auth = resolve_identity(_legacy_acl(workspace_id=workspace_id, subject=acl_subject), ctx)
+        allowed, resolved_root = _path_allowed(repo_root, cfg.ingest_allowed_roots)
+        if not allowed:
+            latency_ms = int((perf_counter() - t0) * 1000)
+            audit_tool(
+                auth=auth,
+                tool="kb.ingest.git_diff",
+                params={
+                    "repo_root": repo_root,
+                    "workspace_id": workspace_id,
+                    "acl_subject": acl_subject,
+                    "since_ref": since_ref,
+                    "dry_run": dry_run,
+                },
+                result_count=0,
+                latency_ms=latency_ms,
+                acl_decision="denied",
+            )
+            return KbIngestOutput(
+                ok=False,
+                error_code="PERMISSION_DENIED",
+                error_detail=f"Ingestion root is outside KB_INGEST_ALLOWED_ROOTS: {resolved_root}",
+                dry_run=dry_run,
+                meta={
+                    "latency_ms": latency_ms,
+                    "resolved_root": resolved_root,
+                    "allowed_roots": list(cfg.ingest_allowed_roots),
+                },
+            )
         result = deps.ingestion.ingest_git_diff(
             root=repo_root,
             workspace_id=auth.ctx.workspace_id,
             acl_allow=[auth.ctx.subject],
             since_ref=since_ref,
+            dry_run=dry_run,
         )
         deps.metrics.inc("tool.kb.ingest.git_diff.calls")
         latency_ms = int((perf_counter() - t0) * 1000)
@@ -610,83 +792,125 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
                 "workspace_id": workspace_id,
                 "acl_subject": acl_subject,
                 "since_ref": since_ref,
+                "dry_run": dry_run,
             },
-            result_count=result.get("created", 0) + result.get("updated", 0),
+            result_count=_result_int(result, "created") + _result_int(result, "updated"),
             latency_ms=latency_ms,
             acl_decision="applied",
         )
-        return result
+        return KbIngestOutput(
+            created=_result_int(result, "created"),
+            updated=_result_int(result, "updated"),
+            skipped=_result_int(result, "skipped"),
+            dry_run=bool(result.get("dry_run", dry_run)),
+            meta={"latency_ms": latency_ms, "resolved_root": resolved_root, "since_ref": since_ref},
+        )
 
     @mcp.resource("kb://doc/{doc_id}")
     def resource_doc(doc_id: str, ctx: FastContext | None = None) -> dict[str, Any]:
         uri = f"kb://doc/{doc_id}"
         doc = deps.metadata.get_doc(uri)
         if doc is None:
-            return {"error": "not_found", "uri": uri}
+            return _contract_error(
+                uri=uri,
+                legacy_error="not_found",
+                error_code="NOT_FOUND",
+                detail="Document resource was not found.",
+            )
         auth = deps.auth.resolve_identity(
             request=_request_from_ctx(ctx),
             payload_acl=None,
             allow_legacy_payload=False,
         )
         if not _resource_allowed(deps=deps, auth_ctx=auth.ctx, data=doc):
-            return {"error": "forbidden", "uri": uri}
+            return _contract_error(
+                uri=uri,
+                legacy_error="forbidden",
+                error_code="PERMISSION_DENIED",
+                detail="Bearer identity cannot read this document resource.",
+            )
         out = dict(doc)
         if "text" in out:
             out["text"] = deps.redact.redact(str(out["text"]))
-        return out
+        return _contract_ok(out)
 
     @mcp.resource("kb://chunk/{chunk_id}")
     def resource_chunk(chunk_id: str, ctx: FastContext | None = None) -> dict[str, Any]:
         uri = f"kb://chunk/{chunk_id}"
         chunk = deps.metadata.get_chunk(uri)
         if chunk is None:
-            return {"error": "not_found", "uri": uri}
+            return _contract_error(
+                uri=uri,
+                legacy_error="not_found",
+                error_code="NOT_FOUND",
+                detail="Chunk resource was not found.",
+            )
         auth = deps.auth.resolve_identity(
             request=_request_from_ctx(ctx),
             payload_acl=None,
             allow_legacy_payload=False,
         )
         if not _resource_allowed(deps=deps, auth_ctx=auth.ctx, data=chunk):
-            return {"error": "forbidden", "uri": uri}
+            return _contract_error(
+                uri=uri,
+                legacy_error="forbidden",
+                error_code="PERMISSION_DENIED",
+                detail="Bearer identity cannot read this chunk resource.",
+            )
         out = dict(chunk)
         out["text"] = deps.redact.redact(str(out.get("text", "")))
-        return out
+        return _contract_ok(out)
 
     @mcp.resource("kb://entity/{entity_id}")
     def resource_entity(entity_id: str, ctx: FastContext | None = None) -> dict[str, Any]:
         uri = f"kb://entity/{entity_id}"
         entity = deps.metadata.get_entity(uri)
         if entity is None:
-            return {"uri": uri, "type": "Entity", "name": entity_id, "links": []}
+            return _contract_ok({"uri": uri, "type": "Entity", "name": entity_id, "links": []})
         auth = deps.auth.resolve_identity(
             request=_request_from_ctx(ctx),
             payload_acl=None,
             allow_legacy_payload=False,
         )
         if not _resource_allowed(deps=deps, auth_ctx=auth.ctx, data=entity):
-            return {"error": "forbidden", "uri": uri}
-        return entity
+            return _contract_error(
+                uri=uri,
+                legacy_error="forbidden",
+                error_code="PERMISSION_DENIED",
+                detail="Bearer identity cannot read this entity resource.",
+            )
+        return _contract_ok(entity)
 
     @mcp.resource("kb://memory/{memory_id}")
     def resource_memory(memory_id: str, ctx: FastContext | None = None) -> dict[str, Any]:
         uri = f"kb://memory/{memory_id}"
         memory = deps.metadata.get_memory(uri)
         if memory is None:
-            return {"error": "not_found", "uri": uri}
+            return _contract_error(
+                uri=uri,
+                legacy_error="not_found",
+                error_code="NOT_FOUND",
+                detail="Memory resource was not found.",
+            )
         auth = deps.auth.resolve_identity(
             request=_request_from_ctx(ctx),
             payload_acl=None,
             allow_legacy_payload=False,
         )
         if not _resource_allowed(deps=deps, auth_ctx=auth.ctx, data=memory):
-            return {"error": "forbidden", "uri": uri}
+            return _contract_error(
+                uri=uri,
+                legacy_error="forbidden",
+                error_code="PERMISSION_DENIED",
+                detail="Bearer identity cannot read this memory resource.",
+            )
         out = dict(memory)
         out["text"] = deps.redact.redact(str(out.get("text", "")))
-        return out
+        return _contract_ok(out)
 
     @mcp.resource("kb://policy/tool-selection")
     def resource_tool_selection_policy() -> dict[str, Any]:
-        return {
+        return _contract_ok({
             "version": POLICY_VERSION,
             "intent_catalog": [
                 "fact_lookup",
@@ -709,7 +933,7 @@ def create_mcp_server(deps: AppDeps | None = None) -> FastMCP:
                 "requires_confidence_threshold": True,
             },
             "fallback_policy": "When graph backend is unavailable, return vector-only evidence with explicit limitation.",
-        }
+        })
 
     @mcp.prompt(name="kb.answer_with_citations")
     def prompt_answer_with_citations(question: str) -> str:

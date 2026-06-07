@@ -5,19 +5,22 @@ from pathlib import Path
 from typing import Any
 
 import jwt
+import pytest
 from starlette.testclient import TestClient
 
 from kb_mcp.bootstrap import build_deps
 from kb_mcp.config import AppConfig
 from kb_mcp.server.app import create_mcp_server
 
+pytestmark = pytest.mark.external
+
 
 def _token(secret: str, sub: str, workspace_id: str) -> str:
     return str(jwt.encode({"sub": sub, "workspace_id": workspace_id, "roles": ["reader"]}, secret, algorithm="HS256"))
 
 
-def _client() -> TestClient:
-    cfg = AppConfig(
+def _client(cfg: AppConfig | None = None) -> TestClient:
+    cfg = cfg or AppConfig(
         auth_mode="strict",
         jwt_secret="secret",
         vector_backend="memory",
@@ -144,6 +147,25 @@ def test_http_bearer_identity_precedence_over_payload_spoof() -> None:
         assert isinstance(debug.get("graph_node_count"), int)
         assert isinstance(debug.get("graph_chunk_bonus_count"), int)
         assert isinstance(debug.get("graph_nonzero"), bool)
+        assert structured.get("ok") is True
+        assert structured.get("error_code") is None
+        assert isinstance(structured.get("meta"), dict)
+
+
+def test_http_tools_list_and_health_contract() -> None:
+    with _client() as client:
+        token = _token("secret", "u1", "w1")
+        tools_resp = _rpc(client=client, method="tools/list", params={}, bearer=token)
+        tools = {tool["name"] for tool in tools_resp["result"]["tools"]}
+        assert "kb.health" in tools
+
+        health_resp = _tool_call(client=client, name="kb.health", arguments={}, bearer=token)
+        health = _tool_structured_content(health_resp)
+        assert health.get("ok") is True
+        assert health.get("service_name") == "hybrid-kb-mcp"
+        assert "kb.search" in health.get("tools", [])
+        assert "kb://policy/tool-selection" in health.get("resources", [])
+        assert "kb.tool_selection_policy" in health.get("prompts", [])
 
 
 def test_http_resource_acl_denies_foreign_workspace_access(tmp_path: Path) -> None:
@@ -191,6 +213,8 @@ def test_http_resource_acl_denies_foreign_workspace_access(tmp_path: Path) -> No
         assert isinstance(foreign_first, dict)
         foreign_payload = json.loads(str(foreign_first.get("text", "{}")))
         assert foreign_payload.get("error") == "forbidden"
+        assert foreign_payload.get("ok") is False
+        assert foreign_payload.get("error_code") == "PERMISSION_DENIED"
 
         owner_read = _rpc(
             client=client,
@@ -206,4 +230,90 @@ def test_http_resource_acl_denies_foreign_workspace_access(tmp_path: Path) -> No
         assert isinstance(owner_first, dict)
         owner_payload = json.loads(str(owner_first.get("text", "{}")))
         assert owner_payload.get("error") is None
+        assert owner_payload.get("ok") is True
         assert owner_payload.get("uri") == chunk_uri
+
+
+def test_ingest_outside_allowlist_returns_controlled_error(tmp_path: Path) -> None:
+    allowed = tmp_path / "allowed"
+    denied = tmp_path / "denied"
+    allowed.mkdir()
+    denied.mkdir()
+    (denied / "secret.md").write_text("should not be scanned", encoding="utf-8")
+
+    cfg = AppConfig(
+        auth_mode="strict",
+        jwt_secret="secret",
+        vector_backend="memory",
+        graph_backend="memory",
+        metadata_backend="memory",
+        ingest_allowed_roots=(str(allowed.resolve()),),
+        transport_security_enabled=True,
+        transport_allowed_hosts=("127.0.0.1", "127.0.0.1:*", "testserver", "testserver:*"),
+        transport_allowed_origins=("http://127.0.0.1", "http://127.0.0.1:*", "http://testserver"),
+    )
+
+    with _client(cfg) as client:
+        token = _token("secret", "u1", "w1")
+        resp = _tool_call(
+            client=client,
+            name="kb.ingest.filesystem",
+            arguments={"root_path": str(denied), "workspace_id": "w1", "acl_subject": "u1"},
+            bearer=token,
+        )
+        structured = _tool_structured_content(resp)
+        assert structured.get("ok") is False
+        assert structured.get("error_code") == "PERMISSION_DENIED"
+        assert structured.get("created") == 0
+        assert structured.get("updated") == 0
+
+
+def test_ingest_dry_run_does_not_write_documents(tmp_path: Path) -> None:
+    (tmp_path / "dry.md").write_text("dry run candidate content", encoding="utf-8")
+    cfg = AppConfig(
+        auth_mode="strict",
+        jwt_secret="secret",
+        vector_backend="memory",
+        graph_backend="memory",
+        metadata_backend="memory",
+        ingest_allowed_roots=(str(tmp_path.resolve()),),
+        transport_security_enabled=True,
+        transport_allowed_hosts=("127.0.0.1", "127.0.0.1:*", "testserver", "testserver:*"),
+        transport_allowed_origins=("http://127.0.0.1", "http://127.0.0.1:*", "http://testserver"),
+    )
+
+    with _client(cfg) as client:
+        token = _token("secret", "u1", "w1")
+        dry_resp = _tool_call(
+            client=client,
+            name="kb.ingest.filesystem",
+            arguments={
+                "root_path": str(tmp_path),
+                "workspace_id": "w1",
+                "acl_subject": "u1",
+                "dry_run": True,
+            },
+            bearer=token,
+        )
+        dry_structured = _tool_structured_content(dry_resp)
+        assert dry_structured.get("ok") is True
+        assert dry_structured.get("dry_run") is True
+        assert dry_structured.get("created") == 1
+
+        search_resp = _tool_call(
+            client=client,
+            name="kb.search",
+            arguments=_search_payload(workspace_id="w1", subject="u1", query="candidate content"),
+            bearer=token,
+        )
+        assert _tool_structured_content(search_resp).get("results") == []
+
+        ingest_resp = _tool_call(
+            client=client,
+            name="kb.ingest.filesystem",
+            arguments={"root_path": str(tmp_path), "workspace_id": "w1", "acl_subject": "u1"},
+            bearer=token,
+        )
+        ingest_structured = _tool_structured_content(ingest_resp)
+        assert ingest_structured.get("dry_run") is False
+        assert ingest_structured.get("created") == 1

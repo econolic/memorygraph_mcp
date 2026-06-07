@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from os import getenv
+from pathlib import Path
+
+
+def _csv_tuple(value: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
+def _resolved_roots(roots: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(str(Path(root).expanduser().resolve()) for root in roots)
 
 
 @dataclass(frozen=True)
@@ -87,6 +96,7 @@ class AppConfig:
     auto_ingest_git_since_ref: str = "HEAD~1"
     auto_ingest_retry_attempts: int = 3
     auto_ingest_retry_backoff_s: float = 1.5
+    ingest_allowed_roots: tuple[str, ...] = ()
 
     vector_timeout_s: float = 1.0
     graph_timeout_s: float = 1.0
@@ -108,22 +118,20 @@ class AppConfig:
 
     @staticmethod
     def from_env() -> "AppConfig":
+        default_auto_roots = "/app/.kb_mcp/project_sync,./kb_mcp"
+        auto_ingest_roots = _csv_tuple(getenv("KB_AUTO_INGEST_ROOTS", default_auto_roots))
+        allowed_roots_raw = getenv("KB_INGEST_ALLOWED_ROOTS", "")
+        ingest_allowed_roots = _resolved_roots(
+            _csv_tuple(allowed_roots_raw) if allowed_roots_raw.strip() else auto_ingest_roots
+        )
         return AppConfig(
             service_name=getenv("KB_SERVICE_NAME", "hybrid-kb-mcp"),
             http_host=getenv("KB_HTTP_HOST", "127.0.0.1"),
             http_port=int(getenv("KB_HTTP_PORT", "8080")),
             auth_mode=getenv("KB_AUTH_MODE", "dual"),
             transport_security_enabled=getenv("KB_TRANSPORT_SECURITY_ENABLED", "true").lower() == "true",
-            transport_allowed_hosts=tuple(
-                item.strip()
-                for item in getenv("KB_TRANSPORT_ALLOWED_HOSTS", "").split(",")
-                if item.strip()
-            ),
-            transport_allowed_origins=tuple(
-                item.strip()
-                for item in getenv("KB_TRANSPORT_ALLOWED_ORIGINS", "").split(",")
-                if item.strip()
-            ),
+            transport_allowed_hosts=_csv_tuple(getenv("KB_TRANSPORT_ALLOWED_HOSTS", "")),
+            transport_allowed_origins=_csv_tuple(getenv("KB_TRANSPORT_ALLOWED_ORIGINS", "")),
             vector_backend=getenv("KB_VECTOR_BACKEND", "qdrant"),
             graph_backend=getenv("KB_GRAPH_BACKEND", "neo4j"),
             metadata_backend=getenv("KB_METADATA_BACKEND", "sqlite"),
@@ -140,11 +148,7 @@ class AppConfig:
             oauth_issuer_url=getenv("KB_OAUTH_ISSUER_URL", ""),
             oauth_audience=getenv("KB_OAUTH_AUDIENCE", ""),
             oauth_jwks_url=getenv("KB_OAUTH_JWKS_URL", ""),
-            oauth_required_scopes=tuple(
-                scope.strip()
-                for scope in getenv("KB_OAUTH_REQUIRED_SCOPES", "").split(",")
-                if scope.strip()
-            ),
+            oauth_required_scopes=_csv_tuple(getenv("KB_OAUTH_REQUIRED_SCOPES", "")),
             embedding_provider=getenv("KB_EMBEDDING_PROVIDER", "local"),
             embedding_model=getenv("KB_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
             embedding_model_revision=getenv("KB_EMBEDDING_MODEL_REVISION", ""),
@@ -180,11 +184,7 @@ class AppConfig:
             chunking_mode=getenv("KB_CHUNKING_MODE", "char"),
             graph_enforce_object_acl=getenv("KB_GRAPH_ENFORCE_OBJECT_ACL", "true").lower() == "true",
             auto_ingest_enabled=getenv("KB_AUTO_INGEST_ENABLED", "true").lower() == "true",
-            auto_ingest_roots=tuple(
-                item.strip()
-                for item in getenv("KB_AUTO_INGEST_ROOTS", "/app/.kb_mcp/project_sync,./kb_mcp").split(",")
-                if item.strip()
-            ),
+            auto_ingest_roots=auto_ingest_roots,
             auto_ingest_workspace_id=getenv("KB_AUTO_INGEST_WORKSPACE_ID", "w1"),
             auto_ingest_acl_subject=getenv("KB_AUTO_INGEST_ACL_SUBJECT", "u1"),
             auto_ingest_interval_s=int(getenv("KB_AUTO_INGEST_INTERVAL_S", "900")),
@@ -193,6 +193,7 @@ class AppConfig:
             auto_ingest_git_since_ref=getenv("KB_AUTO_INGEST_GIT_SINCE_REF", "HEAD~1"),
             auto_ingest_retry_attempts=max(1, int(getenv("KB_AUTO_INGEST_RETRY_ATTEMPTS", "3"))),
             auto_ingest_retry_backoff_s=max(0.1, float(getenv("KB_AUTO_INGEST_RETRY_BACKOFF_S", "1.5"))),
+            ingest_allowed_roots=ingest_allowed_roots,
             vector_timeout_s=float(getenv("KB_VECTOR_TIMEOUT_S", "1.0")),
             graph_timeout_s=float(getenv("KB_GRAPH_TIMEOUT_S", "1.0")),
             rerank_timeout_s=float(getenv("KB_RERANK_TIMEOUT_S", "2.0")),

@@ -26,6 +26,7 @@ def test_incremental_ingestion(tmp_path: Path) -> None:
     assert first["created"] == 1
     assert second["created"] == 0
     assert second["updated"] == 0
+    assert second["skipped"] == 1
 
     file_path.write_text("first content updated", encoding="utf-8")
     third = pipeline.ingest_filesystem(root=str(tmp_path), workspace_id="w1", acl_allow=["u1"])
@@ -58,3 +59,29 @@ def test_ingest_with_empty_changed_files_does_not_fallback_to_full_scan(tmp_path
     assert first["created"] == 0
     assert first["updated"] == 0
     assert second["created"] == 1
+
+
+def test_dry_run_counts_candidates_without_persisting(tmp_path: Path) -> None:
+    file_path = tmp_path / "doc.md"
+    file_path.write_text("content", encoding="utf-8")
+    metadata = MetadataStore()
+
+    pipeline = IngestionPipeline(
+        vector_store=InMemoryVectorStore(),
+        graph_store=InMemoryGraphStore(),
+        metadata=metadata,
+        filesystem=FilesystemConnector(),
+    )
+
+    dry = pipeline.ingest_filesystem(
+        root=str(tmp_path),
+        workspace_id="w1",
+        acl_allow=["u1"],
+        dry_run=True,
+    )
+    actual = pipeline.ingest_filesystem(root=str(tmp_path), workspace_id="w1", acl_allow=["u1"])
+
+    assert dry["dry_run"] is True
+    assert dry["created"] == 1
+    assert metadata.list_chunks_by_doc(doc_uri="kb://doc/missing") == []
+    assert actual["created"] == 1

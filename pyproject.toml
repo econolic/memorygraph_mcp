@@ -45,3 +45,8 @@ strict = true
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+markers = [
+  "docker: requires Docker services",
+  "benchmark: retrieval quality or performance benchmark gate",
+  "external: requires external network/service/model access",
+]

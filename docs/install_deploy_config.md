@@ -91,6 +91,7 @@ Key variables:
   - `KB_FUSION_MODE=linear|rrf`
   - `KB_CHUNKING_MODE=char|sentence`
   - `KB_GRAPH_ENFORCE_OBJECT_ACL=true|false`
+  - `KB_INGEST_ALLOWED_ROOTS=<comma-separated allowed directories>`
   - `KB_AUTO_INGEST_ENABLED=true|false`
   - `KB_AUTO_INGEST_ROOTS=<comma-separated directories>`
   - `KB_AUTO_INGEST_WORKSPACE_ID=<workspace>`
@@ -112,6 +113,7 @@ Default auto-ingest profile:
 
 - `KB_AUTO_INGEST_ENABLED=true`
 - `KB_AUTO_INGEST_ROOTS=/app/.kb_mcp/project_sync,./kb_mcp`
+- `KB_INGEST_ALLOWED_ROOTS` defaults to the resolved `KB_AUTO_INGEST_ROOTS` value when unset.
 - `KB_AUTO_INGEST_WORKSPACE_ID=w1`
 - `KB_AUTO_INGEST_ACL_SUBJECT=u1`
 - `KB_AUTO_INGEST_INTERVAL_S=900`
@@ -522,7 +524,7 @@ curl -sS http://127.0.0.1:8080/mcp \
 
 ### 12.1 Functional
 
-1. `tools/list` returns expected KB tools.
+1. `tools/list` returns expected KB tools, including `kb.health`.
 2. `kb.ingest.filesystem` ingests at least one document.
 3. `kb.search` returns results with citations.
 4. `kb.memory.upsert` -> `kb.memory.search` -> `kb.memory.delete` lifecycle works.

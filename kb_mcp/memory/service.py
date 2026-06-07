@@ -32,6 +32,47 @@ class MemoryService:
         self._metadata = metadata
         self._validator = validator
 
+    @staticmethod
+    def _lexical_score(query: str, text: str) -> float:
+        normalized_query = query.strip().lower()
+        normalized_text = text.strip().lower()
+        if not normalized_query or not normalized_text:
+            return 0.0
+        if normalized_query in normalized_text:
+            return 1.0
+        tokens = {token for token in normalized_query.replace("-", " ").split() if len(token) > 1}
+        if not tokens:
+            return 0.0
+        matches = sum(1 for token in tokens if token in normalized_text)
+        return matches / len(tokens)
+
+    def _search_metadata(
+        self,
+        *,
+        query: str,
+        workspace_id: str,
+        subject: str,
+        top_k: int,
+    ) -> list[MemoryHit]:
+        ranked: list[tuple[float, dict[str, object]]] = []
+        for item in self._metadata.list_memory(workspace_id=workspace_id, subject=subject):
+            score = self._lexical_score(query, str(item.get("text", "")))
+            if score > 0:
+                ranked.append((score, item))
+        ranked.sort(key=lambda pair: pair[0], reverse=True)
+        out: list[MemoryHit] = []
+        for score, item in ranked[:top_k]:
+            citations_raw = item.get("citations", [])
+            out.append(
+                MemoryHit(
+                    uri=str(item.get("uri", "")),
+                    score=score,
+                    text=str(item.get("text", "")),
+                    citations=citations_raw if isinstance(citations_raw, list) else [],
+                )
+            )
+        return out
+
     def upsert(
         self,
         *,
@@ -125,6 +166,8 @@ class MemoryService:
                     citations=list(memory.get("citations", [])) if isinstance(memory.get("citations"), list) else [],
                 )
             )
+        if not out:
+            return self._search_metadata(query=query, workspace_id=workspace_id, subject=subject, top_k=top_k)
         return out
 
     def delete(

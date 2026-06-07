@@ -55,7 +55,7 @@ services:
       - KB_GRAPH_BACKEND=${KB_GRAPH_BACKEND:-neo4j}
       - KB_METADATA_BACKEND=${KB_METADATA_BACKEND:-sqlite}
       - KB_METADATA_DSN=${KB_METADATA_DSN:-sqlite:///./.kb_mcp/metadata.db}
-      - KB_HTTP_HOST=${KB_HTTP_HOST:-0.0.0.0}
+      - KB_HTTP_HOST=0.0.0.0
       - KB_HTTP_PORT=${KB_HTTP_PORT:-8080}
       - KB_AUTH_MODE=${KB_AUTH_MODE:-strict}
       - KB_OAUTH_ISSUER_URL=${KB_OAUTH_ISSUER_URL:-}

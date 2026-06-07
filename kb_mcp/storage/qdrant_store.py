@@ -217,6 +217,7 @@ class QdrantVectorStore:
                     payload=payload_with_id,
                 )
             ],
+            wait=True,
         )
 
     def upsert_memory(self, *, memory_id: str, text: str, payload: dict[str, object]) -> None:
@@ -232,6 +233,7 @@ class QdrantVectorStore:
                     payload=payload_with_id,
                 )
             ],
+            wait=True,
         )
 
     def delete_memory(self, *, memory_ids: list[str], filters: dict[str, object]) -> int:
@@ -243,6 +245,7 @@ class QdrantVectorStore:
         self._client.delete(
             collection_name=self._memory,
             points_selector=models.FilterSelector(filter=selector_filter),
+            wait=True,
         )
         return len(memory_ids)
 
@@ -255,5 +258,6 @@ class QdrantVectorStore:
         self._client.delete(
             collection_name=self._chunks,
             points_selector=models.FilterSelector(filter=selector_filter),
+            wait=True,
         )
         return len(chunk_ids)
