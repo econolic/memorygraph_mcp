@@ -56,21 +56,21 @@ def main() -> int:
 
     tools_response = rpc(args.url, method="tools/list", params={}, token=args.token, request_id="tools")
     tools = {tool["name"] for tool in tools_response.get("result", {}).get("tools", [])}
-    required = {"kb.health", "kb.route", "kb.search", "kb.ingest.filesystem"}
+    required = {"kb_health", "kb_route", "kb_search", "kb_ingest_filesystem"}
     missing = sorted(required - tools)
     if missing:
         raise RuntimeError(f"Missing tools: {missing}")
 
-    health = tool_call(args.url, name="kb.health", arguments={}, token=args.token)
+    health = tool_call(args.url, name="kb_health", arguments={}, token=args.token)
     route = tool_call(
         args.url,
-        name="kb.route",
+        name="kb_route",
         arguments={"payload": {"query": args.query, "requested_mode": "hybrid", "include_memory": True}},
         token=args.token,
     )
     search = tool_call(
         args.url,
-        name="kb.search",
+        name="kb_search",
         arguments={
             "payload": {
                 "query": args.query,

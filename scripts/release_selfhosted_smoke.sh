@@ -125,31 +125,31 @@ docker compose -f "${COMPOSE_FILE}" up -d --build
 echo "[2/10] Waiting for MCP endpoint"
 wait_for_mcp "${TOKEN}"
 
-echo "[3/10] Verifying tools/list, kb.health and kb.route availability"
+echo "[3/10] Verifying tools/list, kb_health and kb_route availability"
 TOOLS_JSON="$(jsonrpc '{"jsonrpc":"2.0","id":"tools","method":"tools/list","params":{}}' "${TOKEN}")"
 "${PYTHON_BIN}" - <<'PY' "${TOOLS_JSON}"
 import json, sys
 data = json.loads(sys.argv[1])
 tools = {t["name"] for t in data["result"]["tools"]}
-required = {"kb.health", "kb.route", "kb.search", "kb.memory.upsert", "kb.memory.search", "kb.memory.delete", "kb.ingest.filesystem"}
+required = {"kb_health", "kb_route", "kb_search", "kb_memory_upsert", "kb_memory_search", "kb_memory_delete", "kb_ingest_filesystem"}
 missing = sorted(required - tools)
 if missing:
     raise SystemExit(f"Missing tools: {missing}")
 print("tools ok")
 PY
-HEALTH_JSON="$(jsonrpc '{"jsonrpc":"2.0","id":"health","method":"tools/call","params":{"name":"kb.health","arguments":{}}}' "${TOKEN}")"
+HEALTH_JSON="$(jsonrpc '{"jsonrpc":"2.0","id":"health","method":"tools/call","params":{"name":"kb_health","arguments":{}}}' "${TOKEN}")"
 "${PYTHON_BIN}" - <<'PY' "${HEALTH_JSON}"
 import json, sys
 data = json.loads(sys.argv[1])
 payload = data["result"].get("structuredContent", {})
 if payload.get("ok") is not True:
-    raise SystemExit(f"kb.health not ok: {data}")
+    raise SystemExit(f"kb_health not ok: {data}")
 print("health ok")
 PY
 
 echo "[4/10] Ingesting smoke source path (${SMOKE_INGEST_ROOT})"
 INGEST_JSON="$(jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"ingest","method":"tools/call","params":{"name":"kb.ingest.filesystem","arguments":{"root_path":"${SMOKE_INGEST_ROOT}","workspace_id":"${WORKSPACE_ID}","acl_subject":"${SUBJECT_ID}"}}}
+{"jsonrpc":"2.0","id":"ingest","method":"tools/call","params":{"name":"kb_ingest_filesystem","arguments":{"root_path":"${SMOKE_INGEST_ROOT}","workspace_id":"${WORKSPACE_ID}","acl_subject":"${SUBJECT_ID}"}}}
 JSON
 )" "${TOKEN}")"
 "${PYTHON_BIN}" - <<'PY' "${INGEST_JSON}"
@@ -165,7 +165,7 @@ PY
 
 echo "[5/10] Search with citations"
 SEARCH_JSON="$(jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"search","method":"tools/call","params":{"name":"kb.search","arguments":{"payload":{"query":"kb.health REGISTERED_TOOLS", "mode":"hybrid","top_k":5,"workspace_id":"${WORKSPACE_ID}","session_id":"${SESSION_ID}","include_memory":false,"filters":{"acl":{"subject":"${SUBJECT_ID}","workspace_id":"${WORKSPACE_ID}","roles":[]}},"graph":{"expand_depth":1,"edge_types":[],"max_nodes":50},"rerank":{"enabled":false,"provider":"cross_encoder","top_n":5}}}}}
+{"jsonrpc":"2.0","id":"search","method":"tools/call","params":{"name":"kb_search","arguments":{"payload":{"query":"kb_health REGISTERED_TOOLS", "mode":"hybrid","top_k":5,"workspace_id":"${WORKSPACE_ID}","session_id":"${SESSION_ID}","include_memory":false,"filters":{"acl":{"subject":"${SUBJECT_ID}","workspace_id":"${WORKSPACE_ID}","roles":[]}},"graph":{"expand_depth":1,"edge_types":[],"max_nodes":50},"rerank":{"enabled":false,"provider":"cross_encoder","top_n":5}}}}}
 JSON
 )" "${TOKEN}")"
 TOP_URI="$("${PYTHON_BIN}" - <<'PY' "${SEARCH_JSON}"
@@ -219,11 +219,11 @@ PY
 )"
 
 echo "[6/10] Route wrapper flow (HTTP)"
-"${PYTHON_BIN}" ./scripts/kb_route_wrapper.py --transport http --token "${TOKEN}" "Какие связи есть у kb.route в проекте?" >/dev/null
+"${PYTHON_BIN}" ./scripts/kb_route_wrapper.py --transport http --token "${TOKEN}" "Какие связи есть у kb_route в проекте?" >/dev/null
 
 echo "[7/10] Memory lifecycle (upsert/search/delete)"
 UPSERT_JSON="$(jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"mem-upsert","method":"tools/call","params":{"name":"kb.memory.upsert","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","session_id":"${SESSION_ID}","items":[{"type":"decision","text":"Release smoke confirms strict self-hosted baseline","confidence":0.95,"citations":[${TOP_CITATION_JSON}]}]}}}}
+{"jsonrpc":"2.0","id":"mem-upsert","method":"tools/call","params":{"name":"kb_memory_upsert","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","session_id":"${SESSION_ID}","items":[{"type":"decision","text":"Release smoke confirms strict self-hosted baseline","confidence":0.95,"citations":[${TOP_CITATION_JSON}]}]}}}}
 JSON
 )" "${TOKEN}")"
 MEMORY_ID="$("${PYTHON_BIN}" - <<'PY' "${UPSERT_JSON}"
@@ -249,11 +249,11 @@ print(ids[0])
 PY
 )"
 jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"mem-search","method":"tools/call","params":{"name":"kb.memory.search","arguments":{"payload":{"query":"strict self-hosted baseline","workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","session_id":"${SESSION_ID}","top_k":5}}}}
+{"jsonrpc":"2.0","id":"mem-search","method":"tools/call","params":{"name":"kb_memory_search","arguments":{"payload":{"query":"strict self-hosted baseline","workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","session_id":"${SESSION_ID}","top_k":5}}}}
 JSON
 )" "${TOKEN}" >/dev/null
 DELETE_INIT_JSON="$(jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"mem-delete-init","method":"tools/call","params":{"name":"kb.memory.delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${MEMORY_ID}"]}}}}
+{"jsonrpc":"2.0","id":"mem-delete-init","method":"tools/call","params":{"name":"kb_memory_delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${MEMORY_ID}"]}}}}
 JSON
 )" "${TOKEN}")"
 CONFIRM_TOKEN="$("${PYTHON_BIN}" - <<'PY' "${DELETE_INIT_JSON}"
@@ -280,7 +280,7 @@ if [[ -z "${CONFIRM_TOKEN}" ]]; then
   exit 1
 fi
 jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"mem-delete-confirm","method":"tools/call","params":{"name":"kb.memory.delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${MEMORY_ID}"],"confirmation_token":"${CONFIRM_TOKEN}"}}}}
+{"jsonrpc":"2.0","id":"mem-delete-confirm","method":"tools/call","params":{"name":"kb_memory_delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${MEMORY_ID}"],"confirmation_token":"${CONFIRM_TOKEN}"}}}}
 JSON
 )" "${TOKEN}" >/dev/null
 
@@ -307,7 +307,7 @@ PY
 
 echo "[9/10] Persistence check across restart"
 PERSIST_UPSERT_JSON="$(jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"persist-upsert","method":"tools/call","params":{"name":"kb.memory.upsert","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","session_id":"${SESSION_ID}","items":[{"type":"decision","text":"Persistence smoke marker","confidence":0.95,"citations":[${TOP_CITATION_JSON}]}]}}}}
+{"jsonrpc":"2.0","id":"persist-upsert","method":"tools/call","params":{"name":"kb_memory_upsert","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","session_id":"${SESSION_ID}","items":[{"type":"decision","text":"Persistence smoke marker","confidence":0.95,"citations":[${TOP_CITATION_JSON}]}]}}}}
 JSON
 )" "${TOKEN}")"
 PERSIST_ID="$("${PYTHON_BIN}" - <<'PY' "${PERSIST_UPSERT_JSON}"
@@ -332,7 +332,7 @@ PY
 docker compose -f "${COMPOSE_FILE}" restart mcp >/dev/null
 wait_for_mcp "${TOKEN}"
 PERSIST_SEARCH_JSON="$(jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"persist-search","method":"tools/call","params":{"name":"kb.memory.search","arguments":{"payload":{"query":"Persistence smoke marker","workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","session_id":"${SESSION_ID}","top_k":5}}}}
+{"jsonrpc":"2.0","id":"persist-search","method":"tools/call","params":{"name":"kb_memory_search","arguments":{"payload":{"query":"Persistence smoke marker","workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","session_id":"${SESSION_ID}","top_k":5}}}}
 JSON
 )" "${TOKEN}")"
 "${PYTHON_BIN}" - <<'PY' "${PERSIST_SEARCH_JSON}" "${PERSIST_ID}"
@@ -367,7 +367,7 @@ if not matched:
 print("persistence ok")
 PY
 P_DELETE_INIT_JSON="$(jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"persist-delete-init","method":"tools/call","params":{"name":"kb.memory.delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${PERSIST_ID}"]}}}}
+{"jsonrpc":"2.0","id":"persist-delete-init","method":"tools/call","params":{"name":"kb_memory_delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${PERSIST_ID}"]}}}}
 JSON
 )" "${TOKEN}")"
 P_CONFIRM_TOKEN="$("${PYTHON_BIN}" - <<'PY' "${P_DELETE_INIT_JSON}"
@@ -394,10 +394,10 @@ if [[ -z "${P_CONFIRM_TOKEN}" ]]; then
   exit 1
 fi
 jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"persist-delete-confirm","method":"tools/call","params":{"name":"kb.memory.delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${PERSIST_ID}"],"confirmation_token":"${P_CONFIRM_TOKEN}"}}}}
+{"jsonrpc":"2.0","id":"persist-delete-confirm","method":"tools/call","params":{"name":"kb_memory_delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${PERSIST_ID}"],"confirmation_token":"${P_CONFIRM_TOKEN}"}}}}
 JSON
 )" "${TOKEN}" >/dev/null
 
 echo "[10/10] Complete"
 echo "Self-hosted smoke completed successfully."
-echo "Optional manual check: stop Neo4j and verify kb.search fallback_mode=vector on relation-impact query."
+echo "Optional manual check: stop Neo4j and verify kb_search fallback_mode=vector on relation-impact query."

@@ -252,16 +252,16 @@ def _legacy_route_fallback(cfg: WrapperConfig, reason: str) -> dict[str, Any]:
     if cfg.include_memory:
         plan.append(
             {
-                "tool": "kb.memory.search",
-                "purpose": "Compatibility fallback: load memory before search because kb.route is unavailable.",
+                "tool": "kb_memory_search",
+                "purpose": "Compatibility fallback: load memory before search because kb_route is unavailable.",
                 "when": "always",
                 "required": False,
             }
         )
     plan.append(
         {
-            "tool": "kb.search",
-            "purpose": "Compatibility fallback: execute direct search because kb.route is unavailable.",
+            "tool": "kb_search",
+            "purpose": "Compatibility fallback: execute direct search because kb_route is unavailable.",
             "when": "always",
             "required": True,
         }
@@ -275,7 +275,7 @@ def _legacy_route_fallback(cfg: WrapperConfig, reason: str) -> dict[str, Any]:
         "execution_plan": plan,
         "constraints": {
             "compatibility_mode": True,
-            "router_tool": "kb.route",
+            "router_tool": "kb_route",
         },
     }
 
@@ -283,7 +283,7 @@ def _legacy_route_fallback(cfg: WrapperConfig, reason: str) -> dict[str, Any]:
 def execute_pipeline(client: McpHttpClient, cfg: WrapperConfig, query: str) -> dict[str, Any]:
     try:
         route = client.call_tool(
-            "kb.route",
+            "kb_route",
             {
                 "payload": {
                     "query": query,
@@ -294,8 +294,8 @@ def execute_pipeline(client: McpHttpClient, cfg: WrapperConfig, query: str) -> d
         )
     except RuntimeError as exc:
         msg = str(exc)
-        if "Unknown tool: kb.route" in msg:
-            route = _legacy_route_fallback(cfg, "kb.route_unavailable_http_fallback")
+        if "Unknown tool: kb_route" in msg:
+            route = _legacy_route_fallback(cfg, "kb_route_unavailable_http_fallback")
         else:
             raise
 
@@ -314,18 +314,18 @@ def execute_pipeline(client: McpHttpClient, cfg: WrapperConfig, query: str) -> d
         if not isinstance(tool, str):
             continue
 
-        if tool == "kb.memory.search":
+        if tool == "kb_memory_search":
             outputs["memory_search"] = client.call_tool(tool, _memory_search_payload(cfg, query))
             continue
 
-        if tool == "kb.search":
+        if tool == "kb_search":
             search_out = client.call_tool(tool, _search_payload(cfg, query, route))
             outputs["search"] = search_out
             continue
 
-        if tool == "kb.graph_expand":
+        if tool == "kb_graph_expand":
             if search_out is None:
-                skipped.append({"tool": tool, "reason": "missing_kb.search_output"})
+                skipped.append({"tool": tool, "reason": "missing_kb_search_output"})
                 continue
             seed_entities = _collect_seed_entities(search_out, cfg.max_seed_entities)
             if not seed_entities:
@@ -335,9 +335,9 @@ def execute_pipeline(client: McpHttpClient, cfg: WrapperConfig, query: str) -> d
             outputs["graph_expand_seeds"] = seed_entities
             continue
 
-        if tool == "kb.explain":
+        if tool == "kb_explain":
             if search_out is None:
-                skipped.append({"tool": tool, "reason": "missing_kb.search_output"})
+                skipped.append({"tool": tool, "reason": "missing_kb_search_output"})
                 continue
             uris = _collect_result_uris(search_out, cfg.explain_top_uris)
             if not uris:
@@ -347,7 +347,7 @@ def execute_pipeline(client: McpHttpClient, cfg: WrapperConfig, query: str) -> d
             outputs["explain_uris"] = uris
             continue
 
-        if tool == "kb.memory.delete":
+        if tool == "kb_memory_delete":
             if not cfg.allow_memory_delete:
                 skipped.append(
                     {
@@ -424,12 +424,12 @@ async def _execute_pipeline_stdio_async(cfg: WrapperConfig, query: str) -> dict[
             await session.initialize()
             tools = await session.list_tools()
             tool_names = {tool.name for tool in tools.tools}
-            if "kb.route" not in tool_names:
-                route = _legacy_route_fallback(cfg, "kb.route_unavailable_stdio_fallback")
+            if "kb_route" not in tool_names:
+                route = _legacy_route_fallback(cfg, "kb_route_unavailable_stdio_fallback")
             else:
                 route = await call_tool(
                     session,
-                    "kb.route",
+                    "kb_route",
                     {
                         "payload": {
                             "query": query,
@@ -454,20 +454,20 @@ async def _execute_pipeline_stdio_async(cfg: WrapperConfig, query: str) -> dict[
                 if not isinstance(tool, str):
                     continue
 
-                if tool == "kb.memory.search":
+                if tool == "kb_memory_search":
                     outputs["memory_search"] = await call_tool(
                         session, tool, _memory_search_payload(cfg, query)
                     )
                     continue
 
-                if tool == "kb.search":
+                if tool == "kb_search":
                     search_out = await call_tool(session, tool, _search_payload(cfg, query, route))
                     outputs["search"] = search_out
                     continue
 
-                if tool == "kb.graph_expand":
+                if tool == "kb_graph_expand":
                     if search_out is None:
-                        skipped.append({"tool": tool, "reason": "missing_kb.search_output"})
+                        skipped.append({"tool": tool, "reason": "missing_kb_search_output"})
                         continue
                     seed_entities = _collect_seed_entities(search_out, cfg.max_seed_entities)
                     if not seed_entities:
@@ -479,9 +479,9 @@ async def _execute_pipeline_stdio_async(cfg: WrapperConfig, query: str) -> dict[
                     outputs["graph_expand_seeds"] = seed_entities
                     continue
 
-                if tool == "kb.explain":
+                if tool == "kb_explain":
                     if search_out is None:
-                        skipped.append({"tool": tool, "reason": "missing_kb.search_output"})
+                        skipped.append({"tool": tool, "reason": "missing_kb_search_output"})
                         continue
                     uris = _collect_result_uris(search_out, cfg.explain_top_uris)
                     if not uris:
@@ -491,7 +491,7 @@ async def _execute_pipeline_stdio_async(cfg: WrapperConfig, query: str) -> dict[
                     outputs["explain_uris"] = uris
                     continue
 
-                if tool == "kb.memory.delete":
+                if tool == "kb_memory_delete":
                     if not cfg.allow_memory_delete:
                         skipped.append(
                             {
@@ -519,7 +519,7 @@ def execute_pipeline_stdio(cfg: WrapperConfig, query: str) -> dict[str, Any]:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Wrapper that calls kb.route first, then executes the MCP execution_plan."
+        description="Wrapper that calls kb_route first, then executes the MCP execution_plan."
     )
     parser.add_argument("query", help="User query to route and execute against MCP.")
     parser.add_argument("--transport", choices=["http", "stdio"], default="http")
@@ -547,7 +547,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--allow-memory-delete",
         action="store_true",
-        help="Allow executing kb.memory.delete if kb.route recommends it.",
+        help="Allow executing kb_memory_delete if kb_route recommends it.",
     )
 
     parser.add_argument(
