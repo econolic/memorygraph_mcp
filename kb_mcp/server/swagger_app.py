@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, AsyncGenerator
 from fastapi import FastAPI, Depends, Request
 from kb_mcp.bootstrap import build_deps, AppDeps
 from kb_mcp.server.schemas import (
@@ -21,7 +21,6 @@ from kb_mcp.observability.tracing import ensure_request_id
 from pydantic import BaseModel
 
 deps: AppDeps | None = None
-from typing import Any, AsyncGenerator
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:

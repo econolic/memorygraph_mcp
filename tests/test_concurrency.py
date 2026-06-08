@@ -4,11 +4,10 @@ import time
 from threading import Thread
 from typing import Any
 
-import pytest
-
 from kb_mcp.ingest.pipeline import IngestionPipeline
 from kb_mcp.ingest.embeddings import LocalSentenceTransformerEmbedder
 from kb_mcp.retrieval.rerank import CrossEncoderReranker
+from kb_mcp.retrieval.models import RetrievedItem
 
 class FakeFilesystemConnector:
     def __init__(self, delay: float = 0.0) -> None:
@@ -103,19 +102,24 @@ def test_embedder_and_reranker_concurrency_locks() -> None:
     reranker = CrossEncoderReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
 
     # Call concurrently from threads
-    embed_errors = []
-    def run_embed():
+    errors = []
+    def run_concurrent():
         try:
             embedder.embed_query("test query")
             embedder.embed_texts(["text 1", "text 2"])
+            reranker.rerank(
+                query="test query",
+                items=[RetrievedItem(uri="kb://doc/1", text="text 1", score=1.0, score_breakdown={})],
+                top_n=5
+            )
         except Exception as exc:
-            embed_errors.append(exc)
+            errors.append(exc)
 
-    t1 = Thread(target=run_embed)
-    t2 = Thread(target=run_embed)
+    t1 = Thread(target=run_concurrent)
+    t2 = Thread(target=run_concurrent)
     t1.start()
     t2.start()
     t1.join()
     t2.join()
 
-    assert not embed_errors
+    assert not errors
