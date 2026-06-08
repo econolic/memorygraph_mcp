@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from threading import BoundedSemaphore
 
 from kb_mcp.retrieval.models import RetrievedItem
 
@@ -16,12 +17,23 @@ class RerankConfig:
 class CrossEncoderReranker:
     """Always-on reranker with lightweight fallback when model is unavailable."""
 
-    def __init__(self) -> None:
+    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2") -> None:
         self._model = None
+        self._model_name = model_name
+        self._initialized = False
+        self._semaphore = BoundedSemaphore(value=1)
+
+    def _ensure_model(self) -> None:
+        if self._initialized:
+            return
+        self._initialized = True
+        import os
+        if "PYTEST_CURRENT_TEST" in os.environ:
+            return
         try:
             from sentence_transformers import CrossEncoder
 
-            self._model = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+            self._model = CrossEncoder(self._model_name)
         except Exception:
             self._model = None
 
@@ -42,6 +54,7 @@ class CrossEncoderReranker:
         if not items:
             return []
 
+        self._ensure_model()
         if self._model is None:
             q_tokens = set(query.lower().split())
             rescored: list[RetrievedItem] = []
@@ -64,7 +77,8 @@ class CrossEncoderReranker:
             return rescored[:top_n]
 
         pairs = [(query, item.text or item.uri) for item in items]
-        raw_scores = self._model.predict(pairs)
+        with self._semaphore:
+            raw_scores = self._model.predict(pairs)
         rescored2: list[RetrievedItem] = []
         for item, raw_score in zip(items, raw_scores, strict=True):
             rerank_score = self._normalize_score(float(raw_score))

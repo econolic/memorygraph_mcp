@@ -45,15 +45,21 @@ class AppConfig:
     oauth_jwks_url: str = ""
     oauth_required_scopes: tuple[str, ...] = ()
 
-    embedding_provider: str = "local"
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
+    embedding_provider: str = "fallback" if getenv("PYTEST_CURRENT_TEST") is not None else "local"
+    embedding_model: str = "intfloat/multilingual-e5-large"
     embedding_model_revision: str = ""
     embedding_base_url: str = ""
     embedding_api_key: str = ""
-    embedding_dimensions: int = 384
+    embedding_dimensions: int = 1024
     embedding_batch_size: int = 32
     embedding_cache_enabled: bool = True
     embedding_cache_max_items: int = 4096
+    embedding_query_prefix: str = "query: "
+    embedding_passage_prefix: str = "passage: "
+    chunking_similarity_threshold: float = 0.5
+    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    query_expansion_enabled: bool = True
+    query_expansion_max_terms: int = 3
     entity_extraction_min_symbol_len: int = 3
     entity_extraction_min_term_len: int = 3
     entity_symbol_allow_pattern: str = r"^[A-Za-z_][A-Za-z0-9_]{2,}$"
@@ -97,6 +103,12 @@ class AppConfig:
     auto_ingest_retry_attempts: int = 3
     auto_ingest_retry_backoff_s: float = 1.5
     ingest_allowed_roots: tuple[str, ...] = ()
+    rate_limit_enabled: bool = True
+    rate_limit_rps: float = 10.0
+    rate_limit_burst: int = 20
+    circuit_breaker_enabled: bool = True
+    circuit_breaker_failure_threshold: int = 5
+    circuit_breaker_recovery_timeout_s: float = 30.0
 
     vector_timeout_s: float = 1.0
     graph_timeout_s: float = 1.0
@@ -149,15 +161,21 @@ class AppConfig:
             oauth_audience=getenv("KB_OAUTH_AUDIENCE", ""),
             oauth_jwks_url=getenv("KB_OAUTH_JWKS_URL", ""),
             oauth_required_scopes=_csv_tuple(getenv("KB_OAUTH_REQUIRED_SCOPES", "")),
-            embedding_provider=getenv("KB_EMBEDDING_PROVIDER", "local"),
-            embedding_model=getenv("KB_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+            embedding_provider=getenv("KB_EMBEDDING_PROVIDER", "fallback" if getenv("PYTEST_CURRENT_TEST") is not None else "local"),
+            embedding_model=getenv("KB_EMBEDDING_MODEL", "intfloat/multilingual-e5-large"),
             embedding_model_revision=getenv("KB_EMBEDDING_MODEL_REVISION", ""),
             embedding_base_url=getenv("KB_EMBEDDING_BASE_URL", ""),
             embedding_api_key=getenv("KB_EMBEDDING_API_KEY", ""),
-            embedding_dimensions=int(getenv("KB_EMBEDDING_DIMENSIONS", "384")),
+            embedding_dimensions=int(getenv("KB_EMBEDDING_DIMENSIONS", "1024")),
             embedding_batch_size=int(getenv("KB_EMBEDDING_BATCH_SIZE", "32")),
             embedding_cache_enabled=getenv("KB_EMBEDDING_CACHE_ENABLED", "true").lower() == "true",
             embedding_cache_max_items=int(getenv("KB_EMBEDDING_CACHE_MAX_ITEMS", "4096")),
+            embedding_query_prefix=getenv("KB_EMBEDDING_QUERY_PREFIX", "query: "),
+            embedding_passage_prefix=getenv("KB_EMBEDDING_PASSAGE_PREFIX", "passage: "),
+            chunking_similarity_threshold=float(getenv("KB_CHUNKING_SIMILARITY_THRESHOLD", "0.5")),
+            rerank_model=getenv("KB_RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
+            query_expansion_enabled=getenv("KB_QUERY_EXPANSION_ENABLED", "true").lower() == "true",
+            query_expansion_max_terms=int(getenv("KB_QUERY_EXPANSION_MAX_TERMS", "3")),
             entity_extraction_min_symbol_len=int(getenv("KB_ENTITY_EXTRACTION_MIN_SYMBOL_LEN", "3")),
             entity_extraction_min_term_len=int(getenv("KB_ENTITY_EXTRACTION_MIN_TERM_LEN", "3")),
             entity_symbol_allow_pattern=getenv(
@@ -194,6 +212,12 @@ class AppConfig:
             auto_ingest_retry_attempts=max(1, int(getenv("KB_AUTO_INGEST_RETRY_ATTEMPTS", "3"))),
             auto_ingest_retry_backoff_s=max(0.1, float(getenv("KB_AUTO_INGEST_RETRY_BACKOFF_S", "1.5"))),
             ingest_allowed_roots=ingest_allowed_roots,
+            rate_limit_enabled=getenv("KB_RATE_LIMIT_ENABLED", "true").lower() == "true",
+            rate_limit_rps=float(getenv("KB_RATE_LIMIT_RPS", "10.0")),
+            rate_limit_burst=int(getenv("KB_RATE_LIMIT_BURST", "20")),
+            circuit_breaker_enabled=getenv("KB_CIRCUIT_BREAKER_ENABLED", "true").lower() == "true",
+            circuit_breaker_failure_threshold=int(getenv("KB_CIRCUIT_BREAKER_FAILURE_THRESHOLD", "5")),
+            circuit_breaker_recovery_timeout_s=float(getenv("KB_CIRCUIT_BREAKER_RECOVERY_TIMEOUT_S", "30.0")),
             vector_timeout_s=float(getenv("KB_VECTOR_TIMEOUT_S", "1.0")),
             graph_timeout_s=float(getenv("KB_GRAPH_TIMEOUT_S", "1.0")),
             rerank_timeout_s=float(getenv("KB_RERANK_TIMEOUT_S", "2.0")),

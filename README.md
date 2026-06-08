@@ -15,14 +15,28 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
 - Metadata persistence (`sqlite` default, `postgres` optional, `memory` for tests/dev)
 - Runtime feature flags for retrieval quality:
   - `KB_FUSION_MODE=linear|rrf`
-  - `KB_CHUNKING_MODE=char|sentence`
+  - `KB_CHUNKING_MODE=char|sentence|semantic|code`
   - `KB_GRAPH_ENFORCE_OBJECT_ACL=true|false`
+- Query expansion (enabled by default, semantic enrichment based on entities list):
+  - `KB_QUERY_EXPANSION_ENABLED=true|false`
+  - `KB_QUERY_EXPANSION_MAX_TERMS` (default is 3)
 - Embeddings and entity extraction quality controls:
-  - `KB_EMBEDDING_BATCH_SIZE`
+  - `KB_EMBEDDING_PROVIDER=local|openai_compatible`
+  - `KB_EMBEDDING_PRESET` (e.g. `multilingual-e5-large`, `paraphrase-multilingual`, `bge-m3`, `all-MiniLM-L6-v2`)
+  - `KB_EMBEDDING_MODEL`
   - `KB_EMBEDDING_MODEL_REVISION`
+  - `KB_EMBEDDING_QUERY_PREFIX`, `KB_EMBEDDING_PASSAGE_PREFIX`
+  - `KB_EMBEDDING_BATCH_SIZE`
   - `KB_EMBEDDING_CACHE_ENABLED`
   - `KB_EMBEDDING_CACHE_MAX_ITEMS`
   - `KB_ENTITY_EXTRACTION_*`
+- Resiliency Middlewares (Rate Limiting & Circuit Breaking):
+  - `KB_RATE_LIMIT_ENABLED=true|false`
+  - `KB_RATE_LIMIT_RPS=10.0`
+  - `KB_RATE_LIMIT_BURST=20`
+  - `KB_CIRCUIT_BREAKER_ENABLED=true|false`
+  - `KB_CIRCUIT_BREAKER_FAILURE_THRESHOLD=5`
+  - `KB_CIRCUIT_BREAKER_RECOVERY_TIMEOUT_S=30.0`
 - Default auto-ingest loop (enabled by default):
   - `KB_AUTO_INGEST_ENABLED=true`
   - `KB_AUTO_INGEST_ROOTS=/app/.kb_mcp/project_sync,./kb_mcp`
@@ -51,9 +65,19 @@ All typed tool outputs include additive contract fields while preserving legacy 
 
 - `ok`: boolean success marker.
 - `error_code`: one of `VALIDATION_ERROR`, `NOT_FOUND`, `PERMISSION_DENIED`, `TIMEOUT`,
-  `UPSTREAM_UNAVAILABLE`, `CONFLICT`, `UNKNOWN_ERROR`, or `null`.
+  `UPSTREAM_UNAVAILABLE`, `CONFLICT`, `BUSINESS_RULE_VIOLATION`, `RATE_LIMITED`, `UNKNOWN_ERROR`, or `null`.
 - `error_detail`: short model-readable error detail, or `null`.
+- `recoverable`: boolean indicator if the operation can be retried, or `null`.
+- `next_action`: recommended client resolution step, or `null`.
 - `meta`: operational metadata such as `latency_ms`, `request_id`, or policy version.
+
+### Human-in-the-Loop Deletion Gate
+
+`kb.memory.delete` is a destructive operation. If called without a `confirmation_token`, the tool returns `ok=false`, `error_code="BUSINESS_RULE_VIOLATION"`, and a generated `confirmation_token` inside the `meta` object alongside a `preview` of memory items targeted for deletion. The client must repeat the tool call passing the `confirmation_token` to commit the delete action.
+
+### Idempotency Keys
+
+`kb.memory.upsert` accepts an optional `idempotency_key` parameter. If a request is received with an `idempotency_key` that matches a previously processed request, the server returns the cached result (`stored_ids` and `validation_report`) immediately without executing the operation or modifying the database.
 
 Compatibility notes:
 
@@ -167,6 +191,19 @@ Expected `structuredContent` shape:
   "backends": {"vector": "qdrant", "graph": "neo4j", "metadata": "sqlite"},
   "tools": ["kb.health", "kb.route", "kb.search"]
 }
+```
+
+## Swagger / OpenAPI Documentation
+
+To explore and test the MCP tools visually via a standard REST API, you can use the built-in Swagger UI wrapper.
+This UI executes the actual core backend logic, bypassing the MCP JSON-RPC/SSE transport.
+
+URL: **`http://localhost:8081/docs`** (exposed by `docker-compose.selfhosted.yml`)
+
+To run the Swagger UI locally without Docker:
+```bash
+set -a; source .env; set +a
+uvicorn kb_mcp.server.swagger_app:app --host 0.0.0.0 --port 8081
 ```
 
 ## Route Wrapper (Client-Side)

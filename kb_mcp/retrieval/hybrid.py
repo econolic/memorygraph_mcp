@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 from kb_mcp.retrieval.fusion import FusionWeights, fuse_scores, rrf_fuse
 from kb_mcp.retrieval.graph_store import GraphStore
 from kb_mcp.retrieval.models import RetrievedItem, RetrievalDebug
 from kb_mcp.retrieval.rerank import CrossEncoderReranker, RerankConfig
 from kb_mcp.retrieval.vector_store import VectorStore
+
+if TYPE_CHECKING:
+    from kb_mcp.retrieval.query_expand import QueryExpander
 
 
 class HybridRetriever:
@@ -18,12 +22,14 @@ class HybridRetriever:
         reranker: CrossEncoderReranker,
         weights: FusionWeights | None = None,
         fusion_mode: str = "linear",
+        query_expander: QueryExpander | None = None,
     ) -> None:
         self._vector = vector_store
         self._graph = graph_store
         self._reranker = reranker
         self._weights = weights or FusionWeights()
         self._fusion_mode = fusion_mode if fusion_mode in {"linear", "rrf"} else "linear"
+        self._query_expander = query_expander
 
     @staticmethod
     def _lexical_score(query: str, text: str) -> float:
@@ -46,7 +52,13 @@ class HybridRetriever:
         rerank: RerankConfig | None = None,
     ) -> tuple[list[RetrievedItem], RetrievalDebug]:
         t0 = time.perf_counter()
-        vector_hits = self._vector.search_chunks(query=query, top_k=top_k, filters=filters)
+
+        workspace_id = str(filters.get("workspace_id", ""))
+        expanded_query = query
+        if self._query_expander is not None and workspace_id:
+            expanded_query = self._query_expander.expand(query, workspace_id)
+
+        vector_hits = self._vector.search_chunks(query=expanded_query, top_k=top_k, filters=filters)
         t1 = time.perf_counter()
 
         fallback_mode: str | None = None
@@ -68,7 +80,7 @@ class HybridRetriever:
                 )
                 graph_node_count = len(nodes)
                 graph_bonus_by_uri = {n.uri: 1.0 for n in nodes}
-            except Exception as exc:  # pragma: no cover - failure path integration-level
+            except Exception as exc:  # pragma: no cover
                 fallback_mode = "vector"
                 fallback_reason = str(exc)
                 graph_bonus_by_uri = {}
@@ -120,7 +132,6 @@ class HybridRetriever:
                     memory_score=memory_score,
                     weights=self._weights,
                 )
-                # Keep baseline robust when rerank is disabled by blending lexical evidence.
                 total = 0.6 * base_total + 0.4 * lexical_score
             fused.append(
                 RetrievedItem(

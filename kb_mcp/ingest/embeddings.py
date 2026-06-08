@@ -3,9 +3,38 @@ from __future__ import annotations
 from collections import OrderedDict
 import hashlib
 import math
-from typing import Protocol
+from threading import BoundedSemaphore
+from typing import Any, Protocol
 
 import httpx
+
+
+EMBEDDING_PRESETS: dict[str, dict[str, Any]] = {
+    "multilingual-e5-large": {
+        "model": "intfloat/multilingual-e5-large",
+        "dimensions": 1024,
+        "query_prefix": "query: ",
+        "passage_prefix": "passage: ",
+    },
+    "paraphrase-multilingual": {
+        "model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        "dimensions": 384,
+        "query_prefix": "",
+        "passage_prefix": "",
+    },
+    "bge-m3": {
+        "model": "BAAI/bge-m3",
+        "dimensions": 1024,
+        "query_prefix": "",
+        "passage_prefix": "",
+    },
+    "all-MiniLM-L6-v2": {
+        "model": "sentence-transformers/all-MiniLM-L6-v2",
+        "dimensions": 384,
+        "query_prefix": "",
+        "passage_prefix": "",
+    },
+}
 
 
 class Embedder(Protocol):
@@ -100,21 +129,42 @@ class LocalSentenceTransformerEmbedder:
         cache_enabled: bool = True,
         cache_max_items: int = 4096,
         fallback: Embedder | None = None,
+        query_prefix: str = "",
+        passage_prefix: str = "",
     ) -> None:
+        self._query_prefix = query_prefix
+        self._passage_prefix = passage_prefix
         self._fallback = fallback or DeterministicFallbackEmbedder()
         self._model = None
         self._dimensions = self._fallback.dimensions
         self._batch_size = max(1, batch_size)
         self._cache = _LRUEmbeddingCache(cache_max_items) if cache_enabled else None
+        self._semaphore = BoundedSemaphore(value=1)
 
+        preset_dims = None
+        for preset in EMBEDDING_PRESETS.values():
+            if preset["model"] == model_name:
+                preset_dims = preset.get("dimensions")
+                break
+        if preset_dims is not None:
+            self._dimensions = preset_dims
+
+        self._model_name = model_name
+        self._model_revision = model_revision
+        self._initialized = False
+
+    def _ensure_model(self) -> None:
+        if self._initialized:
+            return
+        self._initialized = True
         try:
             from sentence_transformers import SentenceTransformer
 
-            revision = model_revision.strip()
+            revision = self._model_revision.strip()
             if revision:
-                model = SentenceTransformer(model_name, revision=revision)
+                model = SentenceTransformer(self._model_name, revision=revision)
             else:
-                model = SentenceTransformer(model_name)
+                model = SentenceTransformer(self._model_name)
             sample = model.encode(["dimension_probe"], normalize_embeddings=True)
             if len(sample) > 0:
                 self._dimensions = len(sample[0])
@@ -127,9 +177,27 @@ class LocalSentenceTransformerEmbedder:
         return self._dimensions
 
     def embed_query(self, text: str) -> list[float]:
-        return self.embed_texts([text])[0]
+        if self._cache is not None:
+            cached = self._cache.get(text)
+            if cached is not None:
+                return cached
+        self._ensure_model()
+        if self._model is None:
+            res = self._fallback.embed_query(text)
+        else:
+            prefixed = self._query_prefix + text
+            try:
+                with self._semaphore:
+                    vectors = self._model.encode([prefixed], normalize_embeddings=True)
+                res = [float(v) for v in vectors[0]]
+            except Exception:
+                res = self._fallback.embed_query(text)
+        if self._cache is not None:
+            self._cache.set(text, res)
+        return res
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        self._ensure_model()
         if self._model is None:
             return self._fallback.embed_texts(texts)
 
@@ -151,11 +219,13 @@ class LocalSentenceTransformerEmbedder:
             try:
                 encoded: list[list[float]] = []
                 for batch in _iter_batches(misses, self._batch_size):
-                    vectors = self._model.encode(
-                        batch,
-                        normalize_embeddings=True,
-                        batch_size=self._batch_size,
-                    )
+                    prefixed_batch = [self._passage_prefix + t for t in batch]
+                    with self._semaphore:
+                        vectors = self._model.encode(
+                            prefixed_batch,
+                            normalize_embeddings=True,
+                            batch_size=self._batch_size,
+                        )
                     encoded.extend([[float(v) for v in vec] for vec in vectors])
             except Exception:
                 return self._fallback.embed_texts(texts)
@@ -188,6 +258,8 @@ class OpenAICompatibleEmbedder:
         cache_enabled: bool = True,
         cache_max_items: int = 4096,
         fallback: Embedder | None = None,
+        query_prefix: str = "",
+        passage_prefix: str = "",
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
@@ -197,13 +269,33 @@ class OpenAICompatibleEmbedder:
         self._batch_size = max(1, batch_size)
         self._cache = _LRUEmbeddingCache(cache_max_items) if cache_enabled else None
         self._fallback = fallback or DeterministicFallbackEmbedder(dimensions=dimensions)
+        self._query_prefix = query_prefix
+        self._passage_prefix = passage_prefix
 
     @property
     def dimensions(self) -> int:
         return self._dimensions
 
     def embed_query(self, text: str) -> list[float]:
-        return self.embed_texts([text])[0]
+        if self._cache is not None:
+            cached = self._cache.get(text)
+            if cached is not None:
+                return cached
+        if not self._base_url or not self._api_key:
+            res = self._fallback.embed_query(text)
+        else:
+            prefixed = self._query_prefix + text
+            try:
+                vectors = self._embed_remote_batch([prefixed])
+                if vectors is not None and len(vectors) > 0:
+                    res = vectors[0]
+                else:
+                    res = self._fallback.embed_query(text)
+            except Exception:
+                res = self._fallback.embed_query(text)
+        if self._cache is not None:
+            self._cache.set(text, res)
+        return res
 
     def _embed_remote_batch(self, texts: list[str]) -> list[list[float]] | None:
         with httpx.Client(timeout=self._timeout_s) as client:
@@ -249,8 +341,9 @@ class OpenAICompatibleEmbedder:
 
         if misses:
             for batch in _iter_batches(misses, self._batch_size):
+                prefixed_batch = [self._passage_prefix + t for t in batch]
                 try:
-                    vectors = self._embed_remote_batch(batch)
+                    vectors = self._embed_remote_batch(prefixed_batch)
                 except Exception:
                     vectors = None
 

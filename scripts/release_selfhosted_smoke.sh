@@ -252,8 +252,35 @@ jsonrpc "$(cat <<JSON
 {"jsonrpc":"2.0","id":"mem-search","method":"tools/call","params":{"name":"kb.memory.search","arguments":{"payload":{"query":"strict self-hosted baseline","workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","session_id":"${SESSION_ID}","top_k":5}}}}
 JSON
 )" "${TOKEN}" >/dev/null
+DELETE_INIT_JSON="$(jsonrpc "$(cat <<JSON
+{"jsonrpc":"2.0","id":"mem-delete-init","method":"tools/call","params":{"name":"kb.memory.delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${MEMORY_ID}"]}}}}
+JSON
+)" "${TOKEN}")"
+CONFIRM_TOKEN="$("${PYTHON_BIN}" - <<'PY' "${DELETE_INIT_JSON}"
+import json, sys
+data = json.loads(sys.argv[1])
+res = data.get("result", {})
+if res.get("isError") is True:
+    payload = res.get("structuredContent", {})
+    print(payload.get("meta", {}).get("confirmation_token", ""))
+else:
+    payload = res.get("structuredContent", {})
+    if not isinstance(payload, dict):
+        content = res.get("content", [])
+        if content and isinstance(content[0], dict):
+            if isinstance(content[0].get("json"), dict):
+                payload = content[0]["json"]
+            elif isinstance(content[0].get("text"), str):
+                payload = json.loads(content[0]["text"])
+    print(payload.get("meta", {}).get("confirmation_token", ""))
+PY
+)"
+if [[ -z "${CONFIRM_TOKEN}" ]]; then
+  echo "No confirmation_token returned for deletion" >&2
+  exit 1
+fi
 jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"mem-delete","method":"tools/call","params":{"name":"kb.memory.delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${MEMORY_ID}"]}}}}
+{"jsonrpc":"2.0","id":"mem-delete-confirm","method":"tools/call","params":{"name":"kb.memory.delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${MEMORY_ID}"],"confirmation_token":"${CONFIRM_TOKEN}"}}}}
 JSON
 )" "${TOKEN}" >/dev/null
 
@@ -339,8 +366,35 @@ if not matched:
     raise SystemExit(f"Persisted memory id not found after restart: {expected}")
 print("persistence ok")
 PY
+P_DELETE_INIT_JSON="$(jsonrpc "$(cat <<JSON
+{"jsonrpc":"2.0","id":"persist-delete-init","method":"tools/call","params":{"name":"kb.memory.delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${PERSIST_ID}"]}}}}
+JSON
+)" "${TOKEN}")"
+P_CONFIRM_TOKEN="$("${PYTHON_BIN}" - <<'PY' "${P_DELETE_INIT_JSON}"
+import json, sys
+data = json.loads(sys.argv[1])
+res = data.get("result", {})
+if res.get("isError") is True:
+    payload = res.get("structuredContent", {})
+    print(payload.get("meta", {}).get("confirmation_token", ""))
+else:
+    payload = res.get("structuredContent", {})
+    if not isinstance(payload, dict):
+        content = res.get("content", [])
+        if content and isinstance(content[0], dict):
+            if isinstance(content[0].get("json"), dict):
+                payload = content[0]["json"]
+            elif isinstance(content[0].get("text"), str):
+                payload = json.loads(content[0]["text"])
+    print(payload.get("meta", {}).get("confirmation_token", ""))
+PY
+)"
+if [[ -z "${P_CONFIRM_TOKEN}" ]]; then
+  echo "No confirmation_token returned for persist deletion" >&2
+  exit 1
+fi
 jsonrpc "$(cat <<JSON
-{"jsonrpc":"2.0","id":"persist-delete","method":"tools/call","params":{"name":"kb.memory.delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${PERSIST_ID}"]}}}}
+{"jsonrpc":"2.0","id":"persist-delete-confirm","method":"tools/call","params":{"name":"kb.memory.delete","arguments":{"payload":{"workspace_id":"${WORKSPACE_ID}","subject":"${SUBJECT_ID}","ids":["${PERSIST_ID}"],"confirmation_token":"${P_CONFIRM_TOKEN}"}}}}
 JSON
 )" "${TOKEN}" >/dev/null
 

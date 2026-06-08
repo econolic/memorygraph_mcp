@@ -41,7 +41,7 @@ services:
       - KB_GRAPH_BACKEND=${KB_GRAPH_BACKEND:-neo4j}
       - KB_METADATA_BACKEND=${KB_METADATA_BACKEND:-sqlite}
       - KB_METADATA_DSN=${KB_METADATA_DSN:-sqlite:///./.kb_mcp/metadata.db}
-      - KB_HTTP_HOST=${KB_HTTP_HOST:-0.0.0.0}
+      - KB_HTTP_HOST=0.0.0.0
       - KB_HTTP_PORT=${KB_HTTP_PORT:-8080}
       - KB_AUTH_MODE=${KB_AUTH_MODE:-dual}
       - KB_OAUTH_ISSUER_URL=${KB_OAUTH_ISSUER_URL:-}
@@ -88,7 +88,7 @@ services:
       - KB_AUTO_INGEST_RETRY_BACKOFF_S=${KB_AUTO_INGEST_RETRY_BACKOFF_S:-1.5}
     ports:
       - "8080:8080"
-      - "9464:9464"
+      - "9465:9464"
     volumes:
       - type: bind
         source: ${KB_MCP_DATA_PATH:-./.docker-data/mcp}

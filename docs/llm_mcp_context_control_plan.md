@@ -9,11 +9,12 @@ Primary objective:
 - guarantee predictable knowledge lifecycle (ingest, retrieval, memory),
 - provide operator-visible health and recovery controls through MCP tools.
 
-## Current State (as of 2026-02-21)
+## Current State (as of 2026-06-07)
 
 - MCP contracts are functional for search, graph expand, explain, memory, and ingest.
 - Auto-ingest runs and reports cycles, but graph can lag behind metadata when files are unchanged by checksum.
-- LLM can detect graph weakness only indirectly via `kb.search.debug.*`, but cannot trigger safe graph backfill in current contracts.
+- LLM can detect graph weakness only indirectly via `kb.search` debug fields (e.g. `debug.graph_nonzero=false`), but cannot trigger safe graph backfill in current contracts.
+- **Note on Status**: The contract additions proposed below (`kb.health.graph_sync`, `kb.ingest.backfill`, `kb.ingest.status`) are target designs for upcoming phases and are not yet implemented in the `0.1.0` release.
 
 Implication:
 - Retrieval stays available (vector path), but relation-heavy answers can degrade silently.

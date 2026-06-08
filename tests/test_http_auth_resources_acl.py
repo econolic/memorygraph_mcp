@@ -114,7 +114,7 @@ def test_http_strict_rejects_missing_bearer() -> None:
     with _client() as client:
         resp = _tool_call(
             client=client,
-            name="kb.search",
+            name="kb_search",
             arguments=_search_payload(workspace_id="w1", subject="u1", query="alpha"),
             bearer=None,
         )
@@ -127,7 +127,7 @@ def test_http_bearer_identity_precedence_over_payload_spoof() -> None:
         token = _token("secret", "header_user", "w_header")
         resp = _tool_call(
             client=client,
-            name="kb.search",
+            name="kb_search",
             arguments=_search_payload(workspace_id="w_spoof", subject="spoof_user", query="alpha"),
             bearer=token,
         )
@@ -157,13 +157,13 @@ def test_http_tools_list_and_health_contract() -> None:
         token = _token("secret", "u1", "w1")
         tools_resp = _rpc(client=client, method="tools/list", params={}, bearer=token)
         tools = {tool["name"] for tool in tools_resp["result"]["tools"]}
-        assert "kb.health" in tools
+        assert "kb_health" in tools
 
-        health_resp = _tool_call(client=client, name="kb.health", arguments={}, bearer=token)
+        health_resp = _tool_call(client=client, name="kb_health", arguments={}, bearer=token)
         health = _tool_structured_content(health_resp)
         assert health.get("ok") is True
         assert health.get("service_name") == "hybrid-kb-mcp"
-        assert "kb.search" in health.get("tools", [])
+        assert "kb_search" in health.get("tools", [])
         assert "kb://policy/tool-selection" in health.get("resources", [])
         assert "kb.tool_selection_policy" in health.get("prompts", [])
 
@@ -178,7 +178,7 @@ def test_http_resource_acl_denies_foreign_workspace_access(tmp_path: Path) -> No
 
         ingest_resp = _tool_call(
             client=client,
-            name="kb.ingest.filesystem",
+            name="kb_ingest_filesystem",
             arguments={"root_path": str(tmp_path), "workspace_id": "w1", "acl_subject": "u1"},
             bearer=token_w1,
         )
@@ -187,7 +187,7 @@ def test_http_resource_acl_denies_foreign_workspace_access(tmp_path: Path) -> No
 
         search_resp = _tool_call(
             client=client,
-            name="kb.search",
+            name="kb_search",
             arguments=_search_payload(workspace_id="w1", subject="u1", query="workspace w1 read"),
             bearer=token_w1,
         )
@@ -257,7 +257,7 @@ def test_ingest_outside_allowlist_returns_controlled_error(tmp_path: Path) -> No
         token = _token("secret", "u1", "w1")
         resp = _tool_call(
             client=client,
-            name="kb.ingest.filesystem",
+            name="kb_ingest_filesystem",
             arguments={"root_path": str(denied), "workspace_id": "w1", "acl_subject": "u1"},
             bearer=token,
         )
@@ -286,7 +286,7 @@ def test_ingest_dry_run_does_not_write_documents(tmp_path: Path) -> None:
         token = _token("secret", "u1", "w1")
         dry_resp = _tool_call(
             client=client,
-            name="kb.ingest.filesystem",
+            name="kb_ingest_filesystem",
             arguments={
                 "root_path": str(tmp_path),
                 "workspace_id": "w1",
@@ -302,7 +302,7 @@ def test_ingest_dry_run_does_not_write_documents(tmp_path: Path) -> None:
 
         search_resp = _tool_call(
             client=client,
-            name="kb.search",
+            name="kb_search",
             arguments=_search_payload(workspace_id="w1", subject="u1", query="candidate content"),
             bearer=token,
         )
@@ -310,7 +310,7 @@ def test_ingest_dry_run_does_not_write_documents(tmp_path: Path) -> None:
 
         ingest_resp = _tool_call(
             client=client,
-            name="kb.ingest.filesystem",
+            name="kb_ingest_filesystem",
             arguments={"root_path": str(tmp_path), "workspace_id": "w1", "acl_subject": "u1"},
             bearer=token,
         )

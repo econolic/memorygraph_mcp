@@ -79,7 +79,9 @@ Key variables:
   - `KB_NEO4J_URI`, `KB_NEO4J_USER`, `KB_NEO4J_PASSWORD`, `KB_NEO4J_DATABASE`
 - Embeddings:
   - `KB_EMBEDDING_PROVIDER=local|openai_compatible`
+  - `KB_EMBEDDING_PRESET` (e.g. `multilingual-e5-large`, `paraphrase-multilingual`, `bge-m3`, `all-MiniLM-L6-v2`)
   - `KB_EMBEDDING_MODEL`, `KB_EMBEDDING_MODEL_REVISION`
+  - `KB_EMBEDDING_QUERY_PREFIX`, `KB_EMBEDDING_PASSAGE_PREFIX`
   - `KB_EMBEDDING_BASE_URL`, `KB_EMBEDDING_API_KEY`, `KB_EMBEDDING_DIMENSIONS`
   - `KB_EMBEDDING_BATCH_SIZE`
   - `KB_EMBEDDING_CACHE_ENABLED`, `KB_EMBEDDING_CACHE_MAX_ITEMS`
@@ -89,7 +91,9 @@ Key variables:
   - `KB_ENTITY_EXTRACTION_STOPWORDS`
 - Retrieval quality/runtime flags:
   - `KB_FUSION_MODE=linear|rrf`
-  - `KB_CHUNKING_MODE=char|sentence`
+  - `KB_CHUNKING_MODE=char|sentence|semantic|code`
+  - `KB_QUERY_EXPANSION_ENABLED=true|false`
+  - `KB_QUERY_EXPANSION_MAX_TERMS`
   - `KB_GRAPH_ENFORCE_OBJECT_ACL=true|false`
   - `KB_INGEST_ALLOWED_ROOTS=<comma-separated allowed directories>`
   - `KB_AUTO_INGEST_ENABLED=true|false`
@@ -102,6 +106,13 @@ Key variables:
   - `KB_AUTO_INGEST_GIT_SINCE_REF=<git ref>`
   - `KB_AUTO_INGEST_RETRY_ATTEMPTS=<N>`
   - `KB_AUTO_INGEST_RETRY_BACKOFF_S=<seconds>`
+- Resiliency Middlewares (Rate Limiting & Circuit Breaking):
+  - `KB_RATE_LIMIT_ENABLED=true|false`
+  - `KB_RATE_LIMIT_RPS` (requests per second)
+  - `KB_RATE_LIMIT_BURST` (maximum burst requests)
+  - `KB_CIRCUIT_BREAKER_ENABLED=true|false`
+  - `KB_CIRCUIT_BREAKER_FAILURE_THRESHOLD` (number of consecutive failures to trip)
+  - `KB_CIRCUIT_BREAKER_RECOVERY_TIMEOUT_S` (recovery cooldown before half-open probe request)
 - Observability:
   - `KB_OTEL_ENABLED=true|false`
   - `KB_OTEL_EXPORTER_OTLP_ENDPOINT`

@@ -119,6 +119,24 @@ Use this runbook for live incidents and recovery actions.
   4. If coverage remains low, schedule controlled reindex/backfill procedure.
   5. Treat relation-heavy answers as degraded until coverage is restored.
 
+### Rate limiting errors (RATE_LIMITED)
+
+- Symptom: calls return `ok=false`, `error_code="RATE_LIMITED"`.
+- Actions:
+  1. Inspect `KB_RATE_LIMIT_ENABLED`, `KB_RATE_LIMIT_RPS`, and `KB_RATE_LIMIT_BURST` env variables.
+  2. Identify the active client subject/workspace exceeding limit using audit logs.
+  3. Increase `KB_RATE_LIMIT_RPS` and/or `KB_RATE_LIMIT_BURST` if legitimate orchestrator workloads require higher throughput.
+  4. Ensure client orchestrators implement exponential backoff and retry when receiving `RATE_LIMITED` responses.
+
+### Circuit breaker trips (UPSTREAM_UNAVAILABLE)
+
+- Symptom: calls immediately return `ok=false`, `error_code="UPSTREAM_UNAVAILABLE"`, and `error_detail` shows "Circuit breaker is OPEN".
+- Actions:
+  1. Inspect upstream storage services (Qdrant, Neo4j, SQLite/Postgres) health and connectivity logs.
+  2. Fix the underlying database/storage connectivity issue so exceptions stop occurring.
+  3. Once the database connection is resolved, the circuit breaker will automatically enter `HALF-OPEN` status after `KB_CIRCUIT_BREAKER_RECOVERY_TIMEOUT_S` (default: 30s) and close upon the first successful tool call.
+  4. If temporary bypass is required, set `KB_CIRCUIT_BREAKER_ENABLED=false` (not recommended for production).
+
 ## Persistence Recovery
 
 If data appears lost after restart:

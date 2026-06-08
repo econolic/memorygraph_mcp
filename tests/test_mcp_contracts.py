@@ -5,9 +5,9 @@ from kb_mcp.server.schemas import KbHealthOutput, KbIngestOutput, KbSearchOutput
 
 
 def test_registered_mcp_surface_includes_health_policy_and_prompts() -> None:
-    assert "kb.health" in REGISTERED_TOOLS
-    assert "kb.search" in REGISTERED_TOOLS
-    assert "kb.ingest.filesystem" in REGISTERED_TOOLS
+    assert "kb_health" in REGISTERED_TOOLS
+    assert "kb_search" in REGISTERED_TOOLS
+    assert "kb_ingest_filesystem" in REGISTERED_TOOLS
     assert "kb://policy/tool-selection" in REGISTERED_RESOURCES
     assert "kb.tool_selection_policy" in REGISTERED_PROMPTS
 

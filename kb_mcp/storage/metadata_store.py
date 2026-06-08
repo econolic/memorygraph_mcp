@@ -46,6 +46,15 @@ class MetadataRepository(Protocol):
     def set_checksum(self, *, workspace_id: str, source_path: str, checksum: str) -> None:
         raise NotImplementedError
 
+    def list_entities(self, *, workspace_id: str) -> list[dict[str, Any]]:
+        raise NotImplementedError
+
+    def get_idempotency(self, key: str) -> dict[str, Any] | None:
+        raise NotImplementedError
+
+    def set_idempotency(self, key: str, result: dict[str, Any]) -> None:
+        raise NotImplementedError
+
 
 class MetadataStore:
     def __init__(self) -> None:
@@ -54,6 +63,7 @@ class MetadataStore:
         self._entities: dict[str, dict[str, Any]] = {}
         self._memory: dict[str, dict[str, Any]] = {}
         self._checksums: dict[tuple[str, str], str] = {}
+        self._idempotency: dict[str, dict[str, Any]] = {}
 
     def put_doc(self, uri: str, data: dict[str, Any]) -> None:
         self._docs[uri] = data
@@ -104,3 +114,16 @@ class MetadataStore:
 
     def set_checksum(self, *, workspace_id: str, source_path: str, checksum: str) -> None:
         self._checksums[(workspace_id, source_path)] = checksum
+
+    def list_entities(self, *, workspace_id: str) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for item in self._entities.values():
+            if item.get("workspace_id") == workspace_id:
+                out.append(item)
+        return out
+
+    def get_idempotency(self, key: str) -> dict[str, Any] | None:
+        return self._idempotency.get(key)
+
+    def set_idempotency(self, key: str, result: dict[str, Any]) -> None:
+        self._idempotency[key] = result

@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
   "mcp>=1.12.4",
   "pydantic>=2.7",
+  "fastapi>=0.100.0",
   "qdrant-client>=1.9",
   "neo4j>=5.20",
   "orjson>=3.10",

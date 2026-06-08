@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 from kb_mcp.memory.validator import MemoryFactValidator, ValidationResult
 from kb_mcp.retrieval.vector_store import VectorStore
@@ -59,7 +60,7 @@ class MemoryService:
             score = self._lexical_score(query, str(item.get("text", "")))
             if score > 0:
                 ranked.append((score, item))
-        ranked.sort(key=lambda pair: pair[0], reverse=True)
+        ranked.sort(key=pair_sort_key, reverse=True)
         out: list[MemoryHit] = []
         for score, item in ranked[:top_k]:
             citations_raw = item.get("citations", [])
@@ -80,7 +81,20 @@ class MemoryService:
         subject: str,
         session_id: str,
         items: list[dict[str, object]],
+        idempotency_key: str | None = None,
     ) -> tuple[list[str], dict[str, list[str]]]:
+        import hashlib
+        import json
+
+        scoped_idempotency_key = None
+        if idempotency_key:
+            payload_str = json.dumps([item for item in items], sort_keys=True)
+            composite_key = f"{workspace_id}:{subject}:{idempotency_key}:{payload_str}"
+            scoped_idempotency_key = hashlib.sha256(composite_key.encode("utf-8")).hexdigest()
+            cached = self._metadata.get_idempotency(scoped_idempotency_key)
+            if cached is not None:
+                return cached.get("stored_ids", []), cached.get("validation_report", {})
+
         stored_ids: list[str] = []
         reports: dict[str, list[str]] = {}
 
@@ -140,6 +154,12 @@ class MemoryService:
             )
             stored_ids.append(memory_id)
 
+        if scoped_idempotency_key:
+            self._metadata.set_idempotency(
+                scoped_idempotency_key,
+                {"stored_ids": stored_ids, "validation_report": reports}
+            )
+
         return stored_ids, reports
 
     def search(
@@ -194,3 +214,7 @@ class MemoryService:
                 deleted_metadata += 1
 
         return min(deleted_vector, deleted_metadata) if deleted_metadata else deleted_vector
+
+
+def pair_sort_key(pair: tuple[float, dict[str, Any]]) -> float:
+    return pair[0]

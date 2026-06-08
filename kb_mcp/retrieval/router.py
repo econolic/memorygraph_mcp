@@ -18,6 +18,78 @@ class RoutedQuery:
     recommended_tools: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class IntentStrategy:
+    intent: Intent
+    markers: tuple[str, ...]
+    recommended_tools: tuple[str, ...]
+
+    def matches(self, query: str, include_memory: bool = False) -> bool:
+        if self.intent == "memory_context" and include_memory:
+            return True
+        q = query.lower()
+        return any(marker in q for marker in self.markers)
+
+
+INTENT_STRATEGIES: list[IntentStrategy] = [
+    IntentStrategy(
+        intent="memory_delete",
+        markers=(
+            "удали память",
+            "forget everything",
+            "delete memory",
+            "remove memory",
+            "удали все что помнишь",
+            "forget what you know",
+        ),
+        recommended_tools=("kb_memory_delete",),
+    ),
+    IntentStrategy(
+        intent="explainability",
+        markers=(
+            "почему так ответил",
+            "почему релевант",
+            "explain relevance",
+            "why this result",
+            "объясни ответ",
+        ),
+        recommended_tools=("kb_search", "kb_explain"),
+    ),
+    IntentStrategy(
+        intent="relation_impact",
+        markers=(
+            "завис",
+            "dependency",
+            "кто использует",
+            "цепоч",
+            "impact",
+            "влия",
+            "связ",
+            "path",
+        ),
+        recommended_tools=("kb_search", "kb_graph_expand"),
+    ),
+    IntentStrategy(
+        intent="memory_context",
+        markers=(
+            "прошл",
+            "раньше",
+            "what did we decide",
+            "my context",
+            "remember",
+            "что мы решили",
+            "мой контекст",
+        ),
+        recommended_tools=("kb_memory_search", "kb_search"),
+    ),
+    IntentStrategy(
+        intent="fact_lookup",
+        markers=(),
+        recommended_tools=("kb_search",),
+    ),
+]
+
+
 class QueryRouter:
     def route(self, query: str, requested: Mode, include_memory: bool = False) -> RoutedQuery:
         intent = self._detect_intent(query=query, include_memory=include_memory)
@@ -56,63 +128,15 @@ class QueryRouter:
         )
 
     def _detect_intent(self, query: str, include_memory: bool) -> Intent:
-        q = query.lower()
-
-        memory_delete_markers = (
-            "удали память",
-            "forget everything",
-            "delete memory",
-            "remove memory",
-            "удали все что помнишь",
-            "forget what you know",
-        )
-        if any(marker in q for marker in memory_delete_markers):
-            return "memory_delete"
-
-        explain_markers = (
-            "почему так ответил",
-            "почему релевант",
-            "explain relevance",
-            "why this result",
-            "объясни ответ",
-        )
-        if any(marker in q for marker in explain_markers):
-            return "explainability"
-
-        relation_markers = (
-            "завис",
-            "dependency",
-            "кто использует",
-            "цепоч",
-            "impact",
-            "влия",
-            "связ",
-            "path",
-        )
-        if any(marker in q for marker in relation_markers):
-            return "relation_impact"
-
-        memory_context_markers = (
-            "прошл",
-            "раньше",
-            "what did we decide",
-            "my context",
-            "remember",
-            "что мы решили",
-            "мой контекст",
-        )
-        if include_memory or any(marker in q for marker in memory_context_markers):
-            return "memory_context"
-
+        for strategy in INTENT_STRATEGIES:
+            if strategy.intent == "fact_lookup":
+                continue
+            if strategy.matches(query, include_memory):
+                return strategy.intent
         return "fact_lookup"
 
     def _recommended_tools(self, intent: Intent) -> tuple[str, ...]:
-        if intent == "memory_delete":
-            return ("kb.memory.delete",)
-        if intent == "memory_context":
-            return ("kb.memory.search", "kb.search")
-        if intent == "relation_impact":
-            return ("kb.search", "kb.graph_expand")
-        if intent == "explainability":
-            return ("kb.search", "kb.explain")
-        return ("kb.search",)
+        for strategy in INTENT_STRATEGIES:
+            if strategy.intent == intent:
+                return strategy.recommended_tools
+        return ("kb_search",)

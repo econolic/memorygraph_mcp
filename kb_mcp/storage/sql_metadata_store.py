@@ -56,6 +56,12 @@ class SQLMetadataStore:
             Column("source_path", Text, primary_key=True),
             Column("checksum", String(256), nullable=False),
         )
+        self._idempotency = Table(
+            "idempotency",
+            self._meta,
+            Column("key", String(256), primary_key=True),
+            Column("payload_json", Text, nullable=False),
+        )
 
         try:
             self._meta.create_all(self._engine)
@@ -251,5 +257,36 @@ class SQLMetadataStore:
                     workspace_id=workspace_id,
                     source_path=source_path,
                     checksum=checksum,
+                )
+            )
+
+    def list_entities(self, *, workspace_id: str) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        with self._engine.begin() as conn:
+            rows = conn.execute(
+                select(self._entities.c.payload_json).where(
+                    self._entities.c.workspace_id == workspace_id
+                )
+            )
+            for row in rows:
+                out.append(self._decode(str(row.payload_json)))
+        return out
+
+    def get_idempotency(self, key: str) -> dict[str, Any] | None:
+        with self._engine.begin() as conn:
+            row = conn.execute(
+                select(self._idempotency.c.payload_json).where(self._idempotency.c.key == key).limit(1)
+            ).first()
+        if row is None:
+            return None
+        return self._decode(str(row.payload_json))
+
+    def set_idempotency(self, key: str, result: dict[str, Any]) -> None:
+        with self._engine.begin() as conn:
+            conn.execute(delete(self._idempotency).where(self._idempotency.c.key == key))
+            conn.execute(
+                insert(self._idempotency).values(
+                    key=key,
+                    payload_json=self._encode(result)
                 )
             )

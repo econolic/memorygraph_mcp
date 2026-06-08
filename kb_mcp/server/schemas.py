@@ -9,8 +9,10 @@ ErrorCode = Literal[
     "VALIDATION_ERROR",
     "NOT_FOUND",
     "PERMISSION_DENIED",
+    "RATE_LIMITED",
     "TIMEOUT",
     "UPSTREAM_UNAVAILABLE",
+    "BUSINESS_RULE_VIOLATION",
     "CONFLICT",
     "UNKNOWN_ERROR",
 ]
@@ -20,6 +22,8 @@ class ContractFields(BaseModel):
     ok: bool = True
     error_code: ErrorCode | None = None
     error_detail: str | None = None
+    recoverable: bool | None = None
+    next_action: str | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -141,6 +145,7 @@ class KbMemoryUpsertInput(BaseModel):
     subject: str = ""
     session_id: str
     items: list[MemoryUpsertItem]
+    idempotency_key: str | None = None
 
 
 class KbMemoryUpsertOutput(ContractFields):
@@ -165,6 +170,7 @@ class KbMemoryDeleteInput(BaseModel):
     subject: str = ""
     ids: list[str] = Field(default_factory=list)
     all_for_subject: bool = False
+    confirmation_token: str | None = None
 
 
 class KbMemoryDeleteOutput(ContractFields):
@@ -210,3 +216,4 @@ class KbHealthOutput(ContractFields):
     resources: list[str]
     prompts: list[str]
     config: dict[str, Any] = Field(default_factory=dict)
+    embedding_info: dict[str, Any] = Field(default_factory=dict)

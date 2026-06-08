@@ -26,6 +26,9 @@ from kb_mcp.retrieval.vector_store import VectorStore
 from kb_mcp.security.acl import AclService
 from kb_mcp.security.auth import JwtAuthService
 from kb_mcp.security.redact import RedactionService
+from kb_mcp.security.confirmation import ConfirmationGate
+from kb_mcp.middleware.rate_limit import RateLimiter
+from kb_mcp.middleware.circuit_breaker import CircuitBreaker
 from kb_mcp.storage.in_memory_graph import InMemoryGraphStore
 from kb_mcp.storage.in_memory_vector import InMemoryVectorStore
 from kb_mcp.storage.metadata_store import MetadataRepository, MetadataStore
@@ -49,6 +52,9 @@ class AppDeps:
     ingestion: IngestionPipeline
     metrics: MetricsRegistry
     audit: AuditLogger
+    confirmation: ConfirmationGate
+    rate_limiter: RateLimiter
+    circuit_breaker: CircuitBreaker
 
 
 def _create_embedder(cfg: AppConfig) -> Embedder:
@@ -61,6 +67,8 @@ def _create_embedder(cfg: AppConfig) -> Embedder:
             cache_enabled=cfg.embedding_cache_enabled,
             cache_max_items=cfg.embedding_cache_max_items,
             fallback=fallback,
+            query_prefix=cfg.embedding_query_prefix,
+            passage_prefix=cfg.embedding_passage_prefix,
         )
     if cfg.embedding_provider == "openai_compatible":
         return OpenAICompatibleEmbedder(
@@ -72,6 +80,8 @@ def _create_embedder(cfg: AppConfig) -> Embedder:
             cache_enabled=cfg.embedding_cache_enabled,
             cache_max_items=cfg.embedding_cache_max_items,
             fallback=fallback,
+            query_prefix=cfg.embedding_query_prefix,
+            passage_prefix=cfg.embedding_passage_prefix,
         )
     return fallback
 
@@ -119,11 +129,17 @@ def build_deps(cfg: AppConfig | None = None) -> AppDeps:
     vector_store = _create_vector_store(cfg, embedder)
     graph_store = _create_graph_store(cfg)
 
+    query_expander = None
+    if cfg.query_expansion_enabled:
+        from kb_mcp.retrieval.query_expand import QueryExpander
+        query_expander = QueryExpander(embedder=embedder, metadata=metadata)
+
     retriever = HybridRetriever(
         vector_store=vector_store,
         graph_store=graph_store,
-        reranker=CrossEncoderReranker(),
+        reranker=CrossEncoderReranker(model_name=cfg.rerank_model),
         fusion_mode=cfg.fusion_mode,
+        query_expander=query_expander,
     )
     evidence = EvidenceBuilder(metadata)
 
@@ -158,9 +174,17 @@ def build_deps(cfg: AppConfig | None = None) -> AppDeps:
             "model": cfg.embedding_model,
             "revision": cfg.embedding_model_revision,
         },
+        embedder=embedder,
+        chunking_similarity_threshold=cfg.chunking_similarity_threshold,
     )
     metrics = MetricsRegistry(prometheus_enabled=cfg.prometheus_enabled)
     audit = AuditLogger()
+    confirmation = ConfirmationGate()
+    rate_limiter = RateLimiter(rps=cfg.rate_limit_rps, burst=cfg.rate_limit_burst)
+    circuit_breaker = CircuitBreaker(
+        failure_threshold=cfg.circuit_breaker_failure_threshold,
+        recovery_timeout=cfg.circuit_breaker_recovery_timeout_s
+    )
 
     return AppDeps(
         config=cfg,
@@ -176,4 +200,7 @@ def build_deps(cfg: AppConfig | None = None) -> AppDeps:
         ingestion=ingestion,
         metrics=metrics,
         audit=audit,
+        confirmation=confirmation,
+        rate_limiter=rate_limiter,
+        circuit_breaker=circuit_breaker,
     )
