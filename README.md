@@ -274,6 +274,42 @@ If you expose it directly to the public internet or operate it as multi-tenant S
 
 For self-hosted production guidance, see `docs/install_deploy_config.md`.
 
+## IDE Integration (Stdio Bridge with Auto-Ingest)
+
+For local development and IDE integration (e.g., Claude Desktop, Cursor, Gemini/Antigravity IDE), it is recommended to run the MCP server via the Stdio bridge. This allows the server to run inside its pre-configured Docker container while automatically mounting, isolating, and indexing whichever workspace directory is currently open in your IDE.
+
+### Automated Installation
+
+Run the installer from the root of the repository:
+
+```bash
+python install.py
+```
+
+This will automatically:
+1. Detect active IDE folders (Cursor, Claude Desktop, Gemini/Antigravity IDE).
+2. Copy the bridge runner script and path config locally.
+3. Register the `hybrid-kb-mcp` server in your IDE's MCP config file.
+
+### Manual Configuration
+
+If the installer does not detect your IDE or you prefer manual setup, add the following to your IDE's MCP configuration file (e.g., `mcp_config.json`, `mcp.json` or `claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "hybrid-kb-mcp": {
+      "command": "python",
+      "args": [
+        "<PATH_TO_CLONED_REPOSITORY>/scripts/mcp_docker_bridge.py"
+      ]
+    }
+  }
+}
+```
+
+Replace `<PATH_TO_CLONED_REPOSITORY>` with the absolute path to your cloned repository (use forward slashes `/`).
+
 ## Bearer Token Setup for MCP Clients
 
 If auth mode is `strict` or `strict_oauth`, MCP calls require bearer auth on every request.
