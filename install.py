@@ -288,10 +288,10 @@ class BridgeInstaller:
 
 def main() -> None:
     repo_root = os.path.dirname(os.path.abspath(__file__))
-    print(f"==================================================")
-    print(f"Starting MCP Bridge Installation")
+    print("==================================================")
+    print("Starting MCP Bridge Installation")
     print(f"Repository Root: {repo_root}")
-    print(f"==================================================")
+    print("==================================================")
 
     resolver = SystemPathResolver()
     targets = resolver.get_targets()
@@ -303,7 +303,7 @@ def main() -> None:
             repo_root, "scripts", "mcp_docker_bridge.py"
         ).replace("\\", "/")
         print(f"  {manual_path}")
-        print(f"==================================================")
+        print("==================================================")
         return
 
     installer = BridgeInstaller(repo_root)
@@ -313,7 +313,7 @@ def main() -> None:
         if installer.install_to(target):
             success_count += 1
 
-    print(f"\n" + "=" * 50)
+    print("\n" + "=" * 50)
     if success_count > 0:
         print(f"Installation finished successfully for {success_count} targets!")
     else:
