@@ -17,6 +17,7 @@ class _FakeQdrantClient:
         self.created_indexes: set[tuple[str, str]] = set()
         self.create_payload_index_calls: list[tuple[str, str]] = []
         self.last_query_filter: models.Filter | None = None
+        self.last_upsert_points: list[models.PointStruct] = []
         _FakeQdrantClient.instances.append(self)
 
     def get_collection(self, *, collection_name: str) -> object:
@@ -63,9 +64,16 @@ class _FakeQdrantClient:
         self.last_query_filter = query_filter
         return SimpleNamespace(points=[])
 
-    def upsert(self, *, collection_name: str, points: list[models.PointStruct]) -> None:
+    def upsert(
+        self,
+        *,
+        collection_name: str,
+        points: list[models.PointStruct],
+        wait: bool = True,
+    ) -> None:
         _ = collection_name
-        _ = points
+        _ = wait
+        self.last_upsert_points = points
 
     def delete(self, *, collection_name: str, points_selector: models.FilterSelector) -> None:
         _ = collection_name
@@ -129,3 +137,26 @@ def test_qdrant_query_filter_includes_tags_sources_updated_after(monkeypatch) ->
         if isinstance(condition, models.FieldCondition)
     }
     assert {"workspace_id", "acl_allow", "tags", "source", "updated_at"}.issubset(keys)
+
+
+def test_qdrant_batches_chunk_embeddings_and_upsert(monkeypatch) -> None:
+    monkeypatch.setattr("kb_mcp.storage.qdrant_store.QdrantClient", _FakeQdrantClient)
+    _FakeQdrantClient.instances.clear()
+    _FakeQdrantClient.global_created_indexes.clear()
+
+    store = QdrantVectorStore(
+        url="http://fake-qdrant:6333",
+        chunks_collection="kb_chunks",
+        memory_collection="kb_memory",
+        embedder=DeterministicFallbackEmbedder(dimensions=384),
+    )
+    store.upsert_chunks(
+        chunks=[
+            {"chunk_id": "c1", "text": "first", "payload": {"workspace_id": "w1"}},
+            {"chunk_id": "c2", "text": "second", "payload": {"workspace_id": "w1"}},
+        ]
+    )
+
+    points = _FakeQdrantClient.instances[-1].last_upsert_points
+    assert len(points) == 2
+    assert [point.payload["_item_id"] for point in points if point.payload] == ["c1", "c2"]

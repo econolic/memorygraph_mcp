@@ -193,6 +193,7 @@ cython_debug/
 
 # Local persistent data for Docker Desktop
 .docker-data/
+.migration-backups/
 
 # PyPI configuration file
 .pypirc

@@ -98,3 +98,34 @@ services:
         condition: service_started
       neo4j:
         condition: service_healthy
+
+  swagger:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["uvicorn", "kb_mcp.server.swagger_app:app", "--host", "0.0.0.0", "--port", "8081"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - KB_QDRANT_URL=${KB_QDRANT_URL:-http://qdrant:6333}
+      - KB_NEO4J_URI=${KB_NEO4J_URI:-bolt://neo4j:7687}
+      - KB_VECTOR_BACKEND=${KB_VECTOR_BACKEND:-qdrant}
+      - KB_GRAPH_BACKEND=${KB_GRAPH_BACKEND:-neo4j}
+      - KB_METADATA_BACKEND=${KB_METADATA_BACKEND:-sqlite}
+      - KB_METADATA_DSN=${KB_METADATA_DSN:-sqlite:///./.kb_mcp/metadata.db}
+      - KB_NEO4J_USER=${KB_NEO4J_USER:-neo4j}
+      - KB_NEO4J_PASSWORD=${KB_NEO4J_PASSWORD:-neo4jpass}
+      - KB_NEO4J_DATABASE=${KB_NEO4J_DATABASE:-neo4j}
+      - KB_AUTO_INGEST_ENABLED=false
+    ports:
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - type: bind
+        source: ${KB_MCP_DATA_PATH:-./.docker-data/mcp}
+        target: /app/.kb_mcp
+    depends_on:
+      qdrant:
+        condition: service_started
+      neo4j:
+        condition: service_healthy

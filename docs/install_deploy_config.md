@@ -252,6 +252,16 @@ docker compose ps
 docker compose logs -f mcp
 ```
 
+For a repository stored on a Windows drive, use Windows PowerShell:
+
+```powershell
+.\scripts\docker_up_windows.ps1
+docker compose ps
+docker compose logs -f mcp
+```
+
+The helper converts all three persistent storage locations to absolute native Windows paths. Do not alternate between Windows Compose and WSL Compose for the same checkout: Docker can interpret `D:\...` and `/mnt/d/...` as different bind sources, making an existing `metadata.db` appear missing even though it was not deleted.
+
 If `KB_PROMETHEUS_ENABLED=true`, metrics are exposed by the app on `KB_PROMETHEUS_PORT`.
 
 - With current `docker-compose.yml`, host mapping is fixed to `9464:9464`, so default endpoint is:

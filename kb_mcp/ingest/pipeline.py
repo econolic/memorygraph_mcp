@@ -171,6 +171,9 @@ class IngestionPipeline:
                 old_chunk_uris = {str(item.get("uri", "")) for item in old_chunks}
 
                 new_chunk_uris: set[str] = set()
+                prepared_chunks: list[
+                    tuple[str, str, str, object, list[str], dict[str, str], dict[str, object]]
+                ] = []
                 lang = "python" if source_path.endswith(".py") else "generic"
                 for idx, chunk in enumerate(
                     chunk_text(
@@ -228,24 +231,60 @@ class IngestionPipeline:
                         "embedding_model": str(self._embedding_model_info.get("model", "")),
                         "embedding_revision": str(self._embedding_model_info.get("revision", "")),
                     }
-                    self._vector.upsert_chunk(chunk_id=chunk_id, text=chunk_text_value, payload=chunk_payload)
+                    prepared_chunks.append(
+                        (
+                            chunk_id,
+                            chunk_uri,
+                            chunk_text_value,
+                            chunk["span"],
+                            entity_uris,
+                            entity_names,
+                            chunk_payload,
+                        )
+                    )
+
+                batch_upsert = getattr(self._vector, "upsert_chunks", None)
+                if callable(batch_upsert):
+                    batch_upsert(
+                        chunks=[
+                            {"chunk_id": item[0], "text": item[2], "payload": item[6]}
+                            for item in prepared_chunks
+                        ]
+                    )
+                else:
+                    for chunk_id, _uri, chunk_text_value, _span, _entities, _names, chunk_payload in prepared_chunks:
+                        self._vector.upsert_chunk(
+                            chunk_id=chunk_id,
+                            text=chunk_text_value,
+                            payload=chunk_payload,
+                        )
+
+                for (
+                    _chunk_id,
+                    chunk_uri,
+                    chunk_text_value,
+                    chunk_span,
+                    entity_uris,
+                    entity_names,
+                    chunk_payload,
+                ) in prepared_chunks:
                     self._metadata.put_chunk(
                         chunk_uri,
                         {
                             "uri": chunk_uri,
                             "doc_uri": doc_uri,
                             "text": chunk_text_value,
-                            "span": chunk["span"],
+                            "span": chunk_span,
                             "entity_uris": entity_uris,
                             "workspace_id": workspace_id,
                             "acl_allow": acl_allow,
-                            "source": source,
-                            "source_path": source_path,
-                            "tags": tags,
-                            "updated_at": now_iso,
-                            "embedding_provider": str(self._embedding_model_info.get("provider", "")),
-                            "embedding_model": str(self._embedding_model_info.get("model", "")),
-                            "embedding_revision": str(self._embedding_model_info.get("revision", "")),
+                            "source": chunk_payload["source"],
+                            "source_path": chunk_payload["source_path"],
+                            "tags": chunk_payload["tags"],
+                            "updated_at": chunk_payload["updated_at"],
+                            "embedding_provider": chunk_payload["embedding_provider"],
+                            "embedding_model": chunk_payload["embedding_model"],
+                            "embedding_revision": chunk_payload["embedding_revision"],
                         },
                     )
                     self._graph.upsert_mentions(

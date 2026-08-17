@@ -116,6 +116,15 @@ class InMemoryVectorStore:
     def upsert_chunk(self, *, chunk_id: str, text: str, payload: dict[str, object]) -> None:
         self._chunks[chunk_id] = _VectorItem(item_id=chunk_id, text=text, payload=payload)
 
+    def upsert_chunks(self, *, chunks: list[dict[str, object]]) -> None:
+        for chunk in chunks:
+            payload = chunk.get("payload", {})
+            self.upsert_chunk(
+                chunk_id=str(chunk.get("chunk_id", "")),
+                text=str(chunk.get("text", "")),
+                payload=dict(payload) if isinstance(payload, dict) else {},
+            )
+
     def upsert_memory(self, *, memory_id: str, text: str, payload: dict[str, object]) -> None:
         self._memory[memory_id] = _VectorItem(item_id=memory_id, text=text, payload=payload)
 

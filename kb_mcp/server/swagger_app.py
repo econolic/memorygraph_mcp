@@ -12,6 +12,7 @@ from kb_mcp.server.schemas import (
     KbHealthOutput
 )
 from contextlib import asynccontextmanager
+from threading import Lock
 from time import perf_counter
 from kb_mcp.server.helpers import resolve_identity, legacy_acl, path_allowed, result_int
 from kb_mcp.retrieval.router import QueryRouter, POLICY_VERSION
@@ -21,11 +22,11 @@ from kb_mcp.observability.tracing import ensure_request_id
 from pydantic import BaseModel
 
 deps: AppDeps | None = None
+deps_lock = Lock()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global deps
-    deps = build_deps()
+    _ = app
     yield
 
 app = FastAPI(
@@ -36,8 +37,12 @@ app = FastAPI(
 )
 
 def get_deps() -> AppDeps:
+    global deps
     if deps is None:
-        raise RuntimeError("Dependencies not initialized")
+        with deps_lock:
+            if deps is None:
+                deps = build_deps()
+    assert deps is not None
     return deps
 
 @app.post("/tools/kb.search", response_model=KbSearchOutput, tags=["Search"])

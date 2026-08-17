@@ -9,6 +9,16 @@ from kb_mcp.storage.in_memory_vector import InMemoryVectorStore
 from kb_mcp.storage.metadata_store import MetadataStore
 
 
+class _BatchTrackingVectorStore(InMemoryVectorStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.batch_sizes: list[int] = []
+
+    def upsert_chunks(self, *, chunks: list[dict[str, object]]) -> None:
+        self.batch_sizes.append(len(chunks))
+        super().upsert_chunks(chunks=chunks)
+
+
 def test_incremental_ingestion(tmp_path: Path) -> None:
     file_path = tmp_path / "doc.md"
     file_path.write_text("first content", encoding="utf-8")
@@ -85,3 +95,19 @@ def test_dry_run_counts_candidates_without_persisting(tmp_path: Path) -> None:
     assert dry["created"] == 1
     assert metadata.list_chunks_by_doc(doc_uri="kb://doc/missing") == []
     assert actual["created"] == 1
+
+
+def test_ingestion_batches_all_chunks_for_each_document(tmp_path: Path) -> None:
+    (tmp_path / "doc.md").write_text("chunk text " * 300, encoding="utf-8")
+    vector_store = _BatchTrackingVectorStore()
+    pipeline = IngestionPipeline(
+        vector_store=vector_store,
+        graph_store=InMemoryGraphStore(),
+        metadata=MetadataStore(),
+        filesystem=FilesystemConnector(),
+    )
+
+    pipeline.ingest_filesystem(root=str(tmp_path), workspace_id="w1", acl_allow=["u1"])
+
+    assert len(vector_store.batch_sizes) == 1
+    assert vector_store.batch_sizes[0] > 1

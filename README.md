@@ -154,6 +154,14 @@ mkdir -p .docker-data/qdrant .docker-data/neo4j/data .docker-data/mcp
 docker compose up -d --build
 ```
 
+When the repository is on a Windows drive, start the stack from Windows PowerShell so bind mounts are resolved as native Windows paths:
+
+```powershell
+.\scripts\docker_up_windows.ps1
+```
+
+Do not launch Compose for the same Windows checkout from WSL: `/mnt/<drive>/...` and `X:\...` can be treated as different Docker bind sources. The helper resolves absolute paths for MCP SQLite metadata, Qdrant, and Neo4j before starting the stack.
+
 Hardened self-hosted profile (recommended baseline for non-dev deployments):
 
 ```bash

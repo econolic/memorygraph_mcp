@@ -205,18 +205,33 @@ class QdrantVectorStore:
         return self._search(collection_name=self._memory, query=query, top_k=top_k, filters=filters)
 
     def upsert_chunk(self, *, chunk_id: str, text: str, payload: dict[str, object]) -> None:
-        payload_with_id = dict(payload)
-        payload_with_id["_item_id"] = chunk_id
-        payload_with_id["text"] = text
-        self._client.upsert(
-            collection_name=self._chunks,
-            points=[
+        self.upsert_chunks(chunks=[{"chunk_id": chunk_id, "text": text, "payload": payload}])
+
+    def upsert_chunks(self, *, chunks: list[dict[str, object]]) -> None:
+        if not chunks:
+            return
+        texts = [str(chunk.get("text", "")) for chunk in chunks]
+        vectors = self._embedder.embed_texts(texts)
+        if len(vectors) != len(chunks):
+            raise RuntimeError("Embedding result count does not match Qdrant chunk batch size")
+
+        points: list[models.PointStruct] = []
+        for chunk, text, vector in zip(chunks, texts, vectors, strict=True):
+            chunk_id = str(chunk.get("chunk_id", ""))
+            raw_payload = chunk.get("payload", {})
+            payload_with_id = dict(raw_payload) if isinstance(raw_payload, dict) else {}
+            payload_with_id["_item_id"] = chunk_id
+            payload_with_id["text"] = text
+            points.append(
                 models.PointStruct(
                     id=self._point_id(chunk_id),
-                    vector=self._embedder.embed_query(text),
+                    vector=vector,
                     payload=payload_with_id,
                 )
-            ],
+            )
+        self._client.upsert(
+            collection_name=self._chunks,
+            points=points,
             wait=True,
         )
 

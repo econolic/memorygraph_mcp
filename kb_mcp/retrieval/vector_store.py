@@ -33,6 +33,9 @@ class VectorStore(Protocol):
     ) -> None:
         raise NotImplementedError
 
+    def upsert_chunks(self, *, chunks: list[dict[str, object]]) -> None:
+        raise NotImplementedError
+
     def upsert_memory(
         self,
         *,
