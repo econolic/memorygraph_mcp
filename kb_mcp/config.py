@@ -32,6 +32,7 @@ class AppConfig:
     qdrant_url: str = "http://qdrant:6333"
     qdrant_collection_chunks: str = "kb_chunks"
     qdrant_collection_memory: str = "kb_memory"
+    qdrant_collection_entities: str = "kb_entities"
 
     neo4j_uri: str = "bolt://neo4j:7687"
     neo4j_user: str = "neo4j"
@@ -60,6 +61,7 @@ class AppConfig:
     rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     query_expansion_enabled: bool = True
     query_expansion_max_terms: int = 3
+    query_expansion_min_score: float = 0.4
     entity_extraction_min_symbol_len: int = 3
     entity_extraction_min_term_len: int = 3
     entity_symbol_allow_pattern: str = r"^[A-Za-z_][A-Za-z0-9_]{2,}$"
@@ -151,6 +153,7 @@ class AppConfig:
             qdrant_url=getenv("KB_QDRANT_URL", "http://qdrant:6333"),
             qdrant_collection_chunks=getenv("KB_QDRANT_COLLECTION_CHUNKS", "kb_chunks"),
             qdrant_collection_memory=getenv("KB_QDRANT_COLLECTION_MEMORY", "kb_memory"),
+            qdrant_collection_entities=getenv("KB_QDRANT_COLLECTION_ENTITIES", "kb_entities"),
             neo4j_uri=getenv("KB_NEO4J_URI", "bolt://neo4j:7687"),
             neo4j_user=getenv("KB_NEO4J_USER", "neo4j"),
             neo4j_password=getenv("KB_NEO4J_PASSWORD", "neo4jpass"),
@@ -176,6 +179,7 @@ class AppConfig:
             rerank_model=getenv("KB_RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"),
             query_expansion_enabled=getenv("KB_QUERY_EXPANSION_ENABLED", "true").lower() == "true",
             query_expansion_max_terms=int(getenv("KB_QUERY_EXPANSION_MAX_TERMS", "3")),
+            query_expansion_min_score=float(getenv("KB_QUERY_EXPANSION_MIN_SCORE", "0.4")),
             entity_extraction_min_symbol_len=int(getenv("KB_ENTITY_EXTRACTION_MIN_SYMBOL_LEN", "3")),
             entity_extraction_min_term_len=int(getenv("KB_ENTITY_EXTRACTION_MIN_TERM_LEN", "3")),
             entity_symbol_allow_pattern=getenv(

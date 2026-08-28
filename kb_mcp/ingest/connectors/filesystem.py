@@ -11,14 +11,20 @@ class FilesystemConnector:
         include_paths: set[str] | None = None,
     ) -> list[dict[str, object]]:
         docs: list[dict[str, object]] = []
-        base = Path(root)
-        for path in base.rglob("*"):
+        base = Path(root).resolve()
+        candidates = (
+            base.rglob("*")
+            if include_paths is None
+            else (Path(raw_path).resolve() for raw_path in include_paths)
+        )
+        for path in candidates:
             if not path.is_file() or path.suffix.lower() not in allowed_ext:
                 continue
-            abs_path = str(path.resolve())
-            if include_paths is not None and abs_path not in include_paths:
+            try:
+                rel_path = str(path.relative_to(base))
+            except ValueError:
                 continue
-            rel_path = str(path.relative_to(base))
+            abs_path = str(path)
             suffix = path.suffix.lower().lstrip(".")
             docs.append(
                 {

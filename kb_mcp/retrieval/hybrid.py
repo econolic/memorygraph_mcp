@@ -53,10 +53,9 @@ class HybridRetriever:
     ) -> tuple[list[RetrievedItem], RetrievalDebug]:
         t0 = time.perf_counter()
 
-        workspace_id = str(filters.get("workspace_id", ""))
         expanded_query = query
-        if self._query_expander is not None and workspace_id:
-            expanded_query = self._query_expander.expand(query, workspace_id)
+        if self._query_expander is not None and str(filters.get("workspace_id", "")):
+            expanded_query = self._query_expander.expand(query, filters)
 
         vector_hits = self._vector.search_chunks(query=expanded_query, top_k=top_k, filters=filters)
         t1 = time.perf_counter()

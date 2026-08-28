@@ -93,6 +93,7 @@ def _create_vector_store(cfg: AppConfig, embedder: Embedder) -> VectorStore:
             chunks_collection=cfg.qdrant_collection_chunks,
             memory_collection=cfg.qdrant_collection_memory,
             embedder=embedder,
+            entities_collection=cfg.qdrant_collection_entities,
         )
     if cfg.vector_backend == "memory":
         return InMemoryVectorStore()
@@ -132,7 +133,11 @@ def build_deps(cfg: AppConfig | None = None) -> AppDeps:
     query_expander = None
     if cfg.query_expansion_enabled:
         from kb_mcp.retrieval.query_expand import QueryExpander
-        query_expander = QueryExpander(embedder=embedder, metadata=metadata)
+        query_expander = QueryExpander(
+            vector_store=vector_store,
+            max_expansions=cfg.query_expansion_max_terms,
+            min_score=cfg.query_expansion_min_score,
+        )
 
     retriever = HybridRetriever(
         vector_store=vector_store,

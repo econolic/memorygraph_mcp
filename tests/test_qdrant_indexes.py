@@ -18,6 +18,7 @@ class _FakeQdrantClient:
         self.create_payload_index_calls: list[tuple[str, str]] = []
         self.last_query_filter: models.Filter | None = None
         self.last_upsert_points: list[models.PointStruct] = []
+        self.last_upsert_collection = ""
         _FakeQdrantClient.instances.append(self)
 
     def get_collection(self, *, collection_name: str) -> object:
@@ -73,6 +74,7 @@ class _FakeQdrantClient:
     ) -> None:
         _ = collection_name
         _ = wait
+        self.last_upsert_collection = collection_name
         self.last_upsert_points = points
 
     def delete(self, *, collection_name: str, points_selector: models.FilterSelector) -> None:
@@ -103,6 +105,8 @@ def test_qdrant_creates_payload_indexes_idempotently(monkeypatch) -> None:
     for instance in _FakeQdrantClient.instances:
         created_fields = {field_name for _collection, field_name in instance.create_payload_index_calls}
         assert expected_fields.issubset(created_fields)
+        indexed_collections = {collection for collection, _field in instance.create_payload_index_calls}
+        assert {"kb_chunks", "kb_memory", "kb_entities"}.issubset(indexed_collections)
 
 
 def test_qdrant_query_filter_includes_tags_sources_updated_after(monkeypatch) -> None:
@@ -160,3 +164,39 @@ def test_qdrant_batches_chunk_embeddings_and_upsert(monkeypatch) -> None:
     points = _FakeQdrantClient.instances[-1].last_upsert_points
     assert len(points) == 2
     assert [point.payload["_item_id"] for point in points if point.payload] == ["c1", "c2"]
+
+
+def test_qdrant_batches_entity_embeddings_with_workspace_scoped_ids(monkeypatch) -> None:
+    monkeypatch.setattr("kb_mcp.storage.qdrant_store.QdrantClient", _FakeQdrantClient)
+    _FakeQdrantClient.instances.clear()
+    _FakeQdrantClient.global_created_indexes.clear()
+
+    store = QdrantVectorStore(
+        url="http://fake-qdrant:6333",
+        chunks_collection="kb_chunks",
+        memory_collection="kb_memory",
+        entities_collection="kb_entities",
+        embedder=DeterministicFallbackEmbedder(dimensions=384),
+    )
+    store.upsert_entities(
+        entities=[
+            {
+                "entity_id": "kb://entity/auth",
+                "text": "AuthService login_module",
+                "payload": {
+                    "workspace_id": "w1",
+                    "acl_allow": ["u1"],
+                    "name": "AuthService",
+                    "aliases": ["login_module"],
+                },
+            }
+        ]
+    )
+
+    client = _FakeQdrantClient.instances[-1]
+    assert client.last_upsert_collection == "kb_entities"
+    assert len(client.last_upsert_points) == 1
+    point = client.last_upsert_points[0]
+    assert point.payload is not None
+    assert point.payload["_item_id"] == "kb://entity/auth"
+    assert point.payload["workspace_id"] == "w1"

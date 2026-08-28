@@ -17,9 +17,14 @@ Hybrid Retrieval MCP server for knowledge base retrieval and persistent conversa
   - `KB_FUSION_MODE=linear|rrf`
   - `KB_CHUNKING_MODE=char|sentence|semantic|code`
   - `KB_GRAPH_ENFORCE_OBJECT_ACL=true|false`
-- Query expansion (enabled by default, semantic enrichment based on entities list):
+- Query expansion (enabled by default, bounded semantic search over persistent entity vectors):
   - `KB_QUERY_EXPANSION_ENABLED=true|false`
   - `KB_QUERY_EXPANSION_MAX_TERMS` (default is 3)
+  - `KB_QUERY_EXPANSION_MIN_SCORE` (default is 0.4)
+  - `KB_QDRANT_COLLECTION_ENTITIES` (default is `kb_entities`)
+  - ingest updates entity vectors in batches; existing installations can backfill them with:
+    `python -m kb_mcp.backfill_entity_embeddings --workspace-id w1 --batch-size 256`
+  - for SQLite installations, stop MCP/Swagger before the one-time backfill and restart them after it
 - Embeddings and entity extraction quality controls:
   - `KB_EMBEDDING_PROVIDER=local|openai_compatible`
   - `KB_EMBEDDING_PRESET` (e.g. `multilingual-e5-large`, `paraphrase-multilingual`, `bge-m3`, `all-MiniLM-L6-v2`)

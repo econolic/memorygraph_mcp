@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from kb_mcp.ingest.connectors.filesystem import FilesystemConnector
 from kb_mcp.ingest.pipeline import IngestionPipeline
@@ -69,6 +70,39 @@ def test_ingest_with_empty_changed_files_does_not_fallback_to_full_scan(tmp_path
     assert first["created"] == 0
     assert first["updated"] == 0
     assert second["created"] == 1
+
+
+def test_changed_file_ingest_does_not_walk_the_repository(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    file_path = tmp_path / "doc.md"
+    file_path.write_text("targeted content", encoding="utf-8")
+
+    def fail_rglob(_self: Path, _pattern: str) -> object:
+        raise AssertionError("targeted ingest must not scan the full repository")
+
+    monkeypatch.setattr(Path, "rglob", fail_rglob)
+    docs = FilesystemConnector().read_documents(
+        str(tmp_path),
+        include_paths={str(file_path.resolve())},
+    )
+
+    assert len(docs) == 1
+    assert docs[0]["source"] == "doc.md"
+
+
+def test_changed_file_ingest_rejects_paths_outside_root(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("must not be read", encoding="utf-8")
+
+    docs = FilesystemConnector().read_documents(
+        str(root),
+        include_paths={str(outside.resolve())},
+    )
+
+    assert docs == []
 
 
 def test_dry_run_counts_candidates_without_persisting(tmp_path: Path) -> None:

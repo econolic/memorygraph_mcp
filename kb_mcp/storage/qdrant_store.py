@@ -28,16 +28,20 @@ class QdrantVectorStore:
         chunks_collection: str,
         memory_collection: str,
         embedder: Embedder,
+        entities_collection: str = "kb_entities",
     ) -> None:
         self._logger = logging.getLogger(__name__)
         self._client = QdrantClient(url=url)
         self._chunks = chunks_collection
         self._memory = memory_collection
+        self._entities = entities_collection
         self._embedder = embedder
         self._ensure_collection(self._chunks)
         self._ensure_collection(self._memory)
+        self._ensure_collection(self._entities)
         self._ensure_payload_indexes(self._chunks)
         self._ensure_payload_indexes(self._memory)
+        self._ensure_payload_indexes(self._entities)
 
     def _ensure_collection(self, collection: str) -> None:
         try:
@@ -204,6 +208,9 @@ class QdrantVectorStore:
     def search_memory(self, *, query: str, top_k: int, filters: dict[str, object]) -> list[VectorHit]:
         return self._search(collection_name=self._memory, query=query, top_k=top_k, filters=filters)
 
+    def search_entities(self, *, query: str, top_k: int, filters: dict[str, object]) -> list[VectorHit]:
+        return self._search(collection_name=self._entities, query=query, top_k=top_k, filters=filters)
+
     def upsert_chunk(self, *, chunk_id: str, text: str, payload: dict[str, object]) -> None:
         self.upsert_chunks(chunks=[{"chunk_id": chunk_id, "text": text, "payload": payload}])
 
@@ -231,6 +238,35 @@ class QdrantVectorStore:
             )
         self._client.upsert(
             collection_name=self._chunks,
+            points=points,
+            wait=True,
+        )
+
+    def upsert_entities(self, *, entities: list[dict[str, object]]) -> None:
+        if not entities:
+            return
+        texts = [str(entity.get("text", "")) for entity in entities]
+        vectors = self._embedder.embed_texts(texts)
+        if len(vectors) != len(entities):
+            raise RuntimeError("Embedding result count does not match Qdrant entity batch size")
+
+        points: list[models.PointStruct] = []
+        for entity, text, vector in zip(entities, texts, vectors, strict=True):
+            entity_id = str(entity.get("entity_id", ""))
+            raw_payload = entity.get("payload", {})
+            payload_with_id = dict(raw_payload) if isinstance(raw_payload, dict) else {}
+            workspace_id = str(payload_with_id.get("workspace_id", ""))
+            payload_with_id["_item_id"] = entity_id
+            payload_with_id["text"] = text
+            points.append(
+                models.PointStruct(
+                    id=self._point_id(f"entity:{workspace_id}:{entity_id}"),
+                    vector=vector,
+                    payload=payload_with_id,
+                )
+            )
+        self._client.upsert(
+            collection_name=self._entities,
             points=points,
             wait=True,
         )

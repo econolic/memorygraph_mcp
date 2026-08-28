@@ -33,7 +33,19 @@ class VectorStore(Protocol):
     ) -> None:
         raise NotImplementedError
 
+    def search_entities(
+        self,
+        *,
+        query: str,
+        top_k: int,
+        filters: dict[str, object],
+    ) -> list[VectorHit]:
+        raise NotImplementedError
+
     def upsert_chunks(self, *, chunks: list[dict[str, object]]) -> None:
+        raise NotImplementedError
+
+    def upsert_entities(self, *, entities: list[dict[str, object]]) -> None:
         raise NotImplementedError
 
     def upsert_memory(

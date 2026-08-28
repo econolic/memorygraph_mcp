@@ -17,6 +17,7 @@ class InMemoryVectorStore:
     def __init__(self) -> None:
         self._chunks: dict[str, _VectorItem] = {}
         self._memory: dict[str, _VectorItem] = {}
+        self._entities: dict[tuple[str, str], _VectorItem] = {}
 
     def _score(self, query: str, text: str) -> float:
         q = set(query.lower().split())
@@ -113,6 +114,15 @@ class InMemoryVectorStore:
         scored.sort(key=lambda x: x.score, reverse=True)
         return scored[:top_k]
 
+    def search_entities(self, *, query: str, top_k: int, filters: dict[str, object]) -> list[VectorHit]:
+        scored = [
+            VectorHit(item_id=item.item_id, score=self._score(query, item.text), payload=item.payload)
+            for item in self._entities.values()
+            if self._matches_filter(item.payload, filters)
+        ]
+        scored.sort(key=lambda x: x.score, reverse=True)
+        return scored[:top_k]
+
     def upsert_chunk(self, *, chunk_id: str, text: str, payload: dict[str, object]) -> None:
         self._chunks[chunk_id] = _VectorItem(item_id=chunk_id, text=text, payload=payload)
 
@@ -123,6 +133,19 @@ class InMemoryVectorStore:
                 chunk_id=str(chunk.get("chunk_id", "")),
                 text=str(chunk.get("text", "")),
                 payload=dict(payload) if isinstance(payload, dict) else {},
+            )
+
+    def upsert_entities(self, *, entities: list[dict[str, object]]) -> None:
+        for entity in entities:
+            entity_id = str(entity.get("entity_id", ""))
+            text = str(entity.get("text", ""))
+            raw_payload = entity.get("payload", {})
+            payload = dict(raw_payload) if isinstance(raw_payload, dict) else {}
+            workspace_id = str(payload.get("workspace_id", ""))
+            self._entities[(workspace_id, entity_id)] = _VectorItem(
+                item_id=entity_id,
+                text=text,
+                payload=payload,
             )
 
     def upsert_memory(self, *, memory_id: str, text: str, payload: dict[str, object]) -> None:

@@ -11,6 +11,7 @@ from kb_mcp.ingest.embeddings import (
 )
 from kb_mcp.ingest.chunking import chunk_text
 from kb_mcp.retrieval.query_expand import QueryExpander
+from kb_mcp.retrieval.models import VectorHit
 from kb_mcp.storage.metadata_store import MetadataStore
 from kb_mcp.storage.sql_metadata_store import SQLMetadataStore
 from kb_mcp.memory.service import MemoryService
@@ -166,39 +167,44 @@ def test_code_chunking_python() -> None:
 
 # --- 3. Query Expansion Tests ---
 
-class ExpansionMockEmbedder:
+class ExpansionVectorStore:
     def __init__(self) -> None:
-        self.dimensions = 2
+        self.calls: list[tuple[str, int, dict[str, object]]] = []
 
-    def embed_query(self, text: str) -> list[float]:
-        if "auth" in text:
-            return [1.0, 0.0]
-        return [0.0, 1.0]
-
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        out = []
-        for text in texts:
-            if "auth" in text.lower() or "login" in text.lower():
-                out.append([0.99, 0.1])  # high similarity to [1.0, 0.0] (auth query)
-            else:
-                out.append([0.1, 0.99])  # low similarity to auth query
-        return out
+    def search_entities(
+        self, *, query: str, top_k: int, filters: dict[str, object]
+    ) -> list[VectorHit]:
+        self.calls.append((query, top_k, filters))
+        return [
+            VectorHit(
+                item_id="kb://ent1",
+                score=0.92,
+                payload={"name": "AuthService", "aliases": ["login_module"]},
+            ),
+            VectorHit(
+                item_id="kb://ent2",
+                score=0.2,
+                payload={"name": "DatabaseConnector", "aliases": []},
+            ),
+        ]
 
 
 def test_query_expansion() -> None:
-    meta = MetadataStore()
-    meta.put_entity("kb://ent1", {"name": "AuthService", "workspace_id": "ws-1", "aliases": ["login_module"]})
-    meta.put_entity("kb://ent2", {"name": "DatabaseConnector", "workspace_id": "ws-1"})
+    vector = ExpansionVectorStore()
+    expander = QueryExpander(vector_store=vector)
 
-    embedder = ExpansionMockEmbedder()
-    expander = QueryExpander(embedder=embedder, metadata=meta)
-
-    expanded = expander.expand("how to use auth?", workspace_id="ws-1", max_expansions=2)
+    filters: dict[str, object] = {
+        "workspace_id": "ws-1",
+        "acl_subject": "u1",
+        "acl_roles": ["reader"],
+    }
+    expanded = expander.expand("how to use auth?", filters=filters, max_expansions=2)
     
     # Should append "AuthService" and "login_module" but not DatabaseConnector
     assert "AuthService" in expanded
     assert "login_module" in expanded
     assert "DatabaseConnector" not in expanded
+    assert vector.calls == [("how to use auth?", 10, filters)]
 
 
 # --- 4. Idempotency Tests ---

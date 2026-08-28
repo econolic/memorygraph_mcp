@@ -16,6 +16,7 @@ from kb_mcp.ingest.entity_extract import (
     extract_entity_aliases,
     extract_entity_relations,
 )
+from kb_mcp.ingest.entity_index import entity_vector_records
 from kb_mcp.retrieval.graph_store import GraphStore
 from kb_mcp.retrieval.vector_store import VectorStore
 from kb_mcp.storage.metadata_store import MetadataRepository
@@ -174,6 +175,7 @@ class IngestionPipeline:
                 prepared_chunks: list[
                     tuple[str, str, str, object, list[str], dict[str, str], dict[str, object]]
                 ] = []
+                indexed_entities: dict[str, dict[str, object]] = {}
                 lang = "python" if source_path.endswith(".py") else "generic"
                 for idx, chunk in enumerate(
                     chunk_text(
@@ -205,18 +207,17 @@ class IngestionPipeline:
                             "kb://entity/"
                         )[-1]
                         entity_names[entity_uri] = str(existing.get("name", "")).strip() or display_name
-                        self._metadata.put_entity(
-                            entity_uri,
-                            {
-                                "uri": entity_uri,
-                                "workspace_id": workspace_id,
-                                "acl_allow": acl_allow,
-                                "type": "Entity",
-                                "name": entity_names[entity_uri],
-                                "aliases": merged_aliases,
-                                "canonical_key": canonical_key,
-                            },
-                        )
+                        entity_payload: dict[str, object] = {
+                            "uri": entity_uri,
+                            "workspace_id": workspace_id,
+                            "acl_allow": acl_allow,
+                            "type": "Entity",
+                            "name": entity_names[entity_uri],
+                            "aliases": merged_aliases,
+                            "canonical_key": canonical_key,
+                        }
+                        self._metadata.put_entity(entity_uri, entity_payload)
+                        indexed_entities[entity_uri] = entity_payload
                     chunk_payload: dict[str, object] = {
                         "workspace_id": workspace_id,
                         "acl_allow": acl_allow,
@@ -258,6 +259,10 @@ class IngestionPipeline:
                             text=chunk_text_value,
                             payload=chunk_payload,
                         )
+
+                batch_entity_upsert = getattr(self._vector, "upsert_entities", None)
+                if callable(batch_entity_upsert):
+                    batch_entity_upsert(entities=entity_vector_records(indexed_entities.values()))
 
                 for (
                     _chunk_id,
